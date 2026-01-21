@@ -71,6 +71,53 @@
             line-height: 1.6;
             font-size: 1em;
         }
+
+        .password-section {
+            margin-top: 40px;
+            text-align: left;
+        }
+
+        .password-section h2 {
+            font-size: 1.4em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .password-section label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .password-input {
+            width: 100%;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            font-size: 1em;
+            margin-bottom: 12px;
+        }
+
+        .unlock-button {
+            display: inline-block;
+            background: #444;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .unlock-button:hover {
+            background: #222;
+        }
+
+        .sheet-button {
+            display: none;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -88,6 +135,39 @@
             Click the link above to access the Target Practice project from Raspberry Pi Foundation. 
             This project will help you learn programming concepts through interactive exercises.
         </p>
+
+        <div class="password-section">
+            <h2>Student Sign-in Sheet</h2>
+            <label for="girls-password">Enter password to access the sign-in sheet:</label>
+            <input 
+                id="girls-password" 
+                type="password" 
+                class="password-input" 
+                placeholder="Password for girls only">
+            <br>
+            <button class="unlock-button" onclick="unlockSheet()">Unlock sheet</button>
+
+            <div class="sheet-button" id="sheet-button-wrapper">
+                <a href="https://docs.google.com/spreadsheets/d/1S0nDbMLoXPsmwRI9Vv-zmVJ-hYnzInuWCJV-cQebqIE/edit?usp=sharing" 
+                   target="_blank" 
+                   class="project-link">
+                    Open Google Sheet to write your name
+                </a>
+            </div>
+        </div>
     </div>
+
+    <script>
+        function unlockSheet() {
+            const input = document.getElementById('girls-password');
+            const wrapper = document.getElementById('sheet-button-wrapper');
+
+            if (input.value === 'onlydadas') {
+                wrapper.style.display = 'block';
+            } else {
+                alert('Incorrect password. Please try again.');
+            }
+        }
+    </script>
 </body>
 </html>

@@ -118,6 +118,16 @@
             display: none;
             margin-top: 10px;
         }
+
+        .error-message {
+            display: none;
+            margin-top: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background-color: #ffe5e5;
+            color: #b00020;
+            font-size: 0.95em;
+        }
     </style>
 </head>
 <body>
@@ -147,6 +157,10 @@
             <br>
             <button class="unlock-button" onclick="unlockSheet()">Unlock sheet</button>
 
+            <div id="error-message" class="error-message">
+                The password is not correct. Please try again.
+            </div>
+
             <div class="sheet-button" id="sheet-button-wrapper">
                 <a href="https://docs.google.com/spreadsheets/d/1S0nDbMLoXPsmwRI9Vv-zmVJ-hYnzInuWCJV-cQebqIE/edit?usp=sharing" 
                    target="_blank" 
@@ -161,11 +175,14 @@
         function unlockSheet() {
             const input = document.getElementById('girls-password');
             const wrapper = document.getElementById('sheet-button-wrapper');
+            const errorBox = document.getElementById('error-message');
 
             if (input.value === 'onlydadas') {
                 wrapper.style.display = 'block';
+                errorBox.style.display = 'none';
             } else {
-                alert('Incorrect password. Please try again.');
+                wrapper.style.display = 'none';
+                errorBox.style.display = 'block';
             }
         }
     </script>

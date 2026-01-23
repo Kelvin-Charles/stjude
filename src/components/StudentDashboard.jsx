@@ -74,7 +74,8 @@ export default function StudentDashboard() {
       })
       const data = await response.json()
       if (data.success) {
-        fetchProjects()
+        // Refresh projects list to show updated progress
+        await fetchProjects()
         fetchLeaderboard() // Refresh leaderboard after progress update
         // Don't close modal, let student continue
       }
@@ -241,6 +242,8 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
   const [showOutput, setShowOutput] = useState(false)
   const [showFullCode, setShowFullCode] = useState(false)
   const [showQuiz, setShowQuiz] = useState(false)
+  const [stepProgress, setStepProgress] = useState([])
+  const [projectProgress, setProjectProgress] = useState(null)
 
   useEffect(() => {
     const fetchSteps = async () => {
@@ -266,7 +269,25 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
     }
 
     fetchSteps()
+    fetchProjectProgress()
   }, [project.id, token])
+
+  const fetchProjectProgress = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${project.id}/progress`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (data.success) {
+        setProjectProgress(data.progress)
+        setStepProgress(data.step_progress || [])
+      }
+    } catch (err) {
+      console.error('Error fetching project progress:', err)
+    }
+  }
 
   const currentStep = steps[currentStepIndex] || null
 
@@ -296,12 +317,20 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
       if (data.success) {
         setSubmitResult(data)
 
-        // Update overall project progress from steps
-        const totalSteps = steps.length || 1
-        const completedSteps = currentStepIndex + (data.all_correct ? 1 : 0)
-        const percentage = Math.round((completedSteps / totalSteps) * 100)
-        const status = percentage === 100 ? 'completed' : 'in_progress'
-        onUpdate(project.id, status, percentage)
+        // Refresh project progress to get accurate calculation from backend
+        await fetchProjectProgress()
+        
+        // Update overall project progress (backend will calculate accurately)
+        if (projectProgress) {
+          onUpdate(project.id, projectProgress.status, projectProgress.progress_percentage)
+        } else {
+          // Fallback calculation
+          const totalSteps = steps.length || 1
+          const completedSteps = currentStepIndex + 1
+          const percentage = Math.round((completedSteps / totalSteps) * 100)
+          const status = percentage === 100 ? 'completed' : 'in_progress'
+          onUpdate(project.id, status, percentage)
+        }
         
         // Refresh leaderboard to show updated points
         if (onLeaderboardUpdate) {
@@ -318,13 +347,15 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
     }
   }
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     setSubmitResult(null)
     setAnswers({})
     setShowQuiz(false)
     setShowFullCode(false)
     if (currentStepIndex < steps.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1)
+      // Refresh progress after moving to next step
+      await fetchProjectProgress()
     }
   }
 
@@ -393,10 +424,51 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
               <span className="text-sm text-gray-500">
                 Step {currentStep.order_index} of {steps.length}
               </span>
+              {projectProgress && (
+                <div className="text-sm">
+                  <span className="text-gray-600">Project Progress: </span>
+                  <span className="font-bold text-indigo-600">{projectProgress.progress_percentage}%</span>
+                  {stepProgress.find(sp => sp.step_id === currentStep.id)?.is_completed && (
+                    <span className="ml-2 text-green-600">✓ Completed</span>
+                  )}
+                </div>
+              )}
             </div>
 
             <h4 className="text-xl font-semibold mb-2">{currentStep.title}</h4>
             <p className="whitespace-pre-line text-gray-800 mb-4">{currentStep.content}</p>
+
+            {/* Step Progress Indicator */}
+            {steps.length > 1 && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Steps Completed:</span>
+                  <span className="text-sm font-bold text-indigo-600">
+                    {stepProgress.filter(sp => sp.is_completed).length} / {steps.length}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {steps.map((step, idx) => {
+                    const stepProg = stepProgress.find(sp => sp.step_id === step.id)
+                    const isCompleted = stepProg?.is_completed || false
+                    const isCurrent = idx === currentStepIndex
+                    return (
+                      <div
+                        key={step.id}
+                        className={`flex-1 h-2 rounded ${
+                          isCompleted
+                            ? 'bg-green-500'
+                            : isCurrent
+                            ? 'bg-indigo-500'
+                            : 'bg-gray-300'
+                        }`}
+                        title={`Step ${step.order_index}: ${isCompleted ? 'Completed' : 'Not started'}`}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Multiple Code Snippets - Hidden when quiz is shown */}
             {!showQuiz && currentStep.code_snippet && (() => {

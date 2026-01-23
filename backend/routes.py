@@ -213,18 +213,149 @@ def update_progress(user):
       prog = ProjectProgress(student_id=user.id, project_id=project.id)
       db.session.add(prog)
 
-    if "status" in data:
-      prog.status = data["status"]
-    if "progress_percentage" in data:
-      prog.progress_percentage = max(
-        0, min(100, int(data["progress_percentage"]))
-      )
+    # Calculate progress based on actual step completions
+    total_steps = ProjectStep.query.filter_by(
+      project_id=project_id, is_released=True
+    ).count()
+    
+    if total_steps > 0:
+      # Count steps where student has answered at least one question
+      completed_steps = 0
+      steps = ProjectStep.query.filter_by(
+        project_id=project_id, is_released=True
+      ).order_by(ProjectStep.order_index.asc()).all()
+      
+      for step in steps:
+        # Check if student has answered any question in this step
+        has_answers = StudentStepAnswer.query.join(
+          ProjectStepQuestion
+        ).filter(
+          StudentStepAnswer.student_id == user.id,
+          ProjectStepQuestion.step_id == step.id
+        ).first() is not None
+        
+        if has_answers:
+          completed_steps += 1
+      
+      calculated_percentage = int((completed_steps / total_steps) * 100)
+      
+      # Use calculated percentage if not explicitly provided
+      if "progress_percentage" in data:
+        prog.progress_percentage = max(
+          0, min(100, int(data["progress_percentage"]))
+        )
+      else:
+        prog.progress_percentage = calculated_percentage
+      
+      # Update status based on progress
+      if calculated_percentage == 100:
+        prog.status = "completed"
+        if not prog.completed_at:
+          prog.completed_at = datetime.utcnow()
+      elif calculated_percentage > 0:
+        prog.status = "in_progress"
+        if not prog.started_at:
+          prog.started_at = datetime.utcnow()
+      else:
+        prog.status = "not_started"
+    else:
+      # Fallback to manual update if no steps
+      if "status" in data:
+        prog.status = data["status"]
+      if "progress_percentage" in data:
+        prog.progress_percentage = max(
+          0, min(100, int(data["progress_percentage"]))
+        )
+    
     prog.updated_at = datetime.utcnow()
     db.session.commit()
 
     return jsonify({"success": True, "progress": prog.to_dict()}), 200
   except Exception as e:
     db.session.rollback()
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/projects/<int:project_id>/progress", methods=["GET"])
+@require_student
+def get_project_progress(user, project_id):
+  """Get detailed progress for a specific project including step completion"""
+  try:
+    project = Project.query.get_or_404(project_id)
+    
+    # Get overall progress
+    prog = ProjectProgress.query.filter_by(
+      student_id=user.id, project_id=project_id
+    ).first()
+    
+    if not prog:
+      prog = ProjectProgress(student_id=user.id, project_id=project_id)
+      db.session.add(prog)
+      db.session.commit()
+    
+    # Get all steps and their completion status
+    steps = ProjectStep.query.filter_by(
+      project_id=project_id, is_released=True
+    ).order_by(ProjectStep.order_index.asc()).all()
+    
+    step_progress = []
+    for step in steps:
+      # Check if student has answered questions for this step
+      step_questions = ProjectStepQuestion.query.filter_by(step_id=step.id).all()
+      answered_count = 0
+      correct_count = 0
+      total_points_earned = 0
+      total_points_possible = sum(q.points for q in step_questions)
+      
+      for question in step_questions:
+        answer = StudentStepAnswer.query.filter_by(
+          student_id=user.id, question_id=question.id
+        ).first()
+        if answer:
+          answered_count += 1
+          if answer.is_correct:
+            correct_count += 1
+          total_points_earned += answer.points_awarded
+      
+      step_progress.append({
+        "step_id": step.id,
+        "step_order": step.order_index,
+        "step_title": step.title,
+        "is_completed": answered_count > 0,
+        "questions_answered": answered_count,
+        "questions_correct": correct_count,
+        "total_questions": len(step_questions),
+        "points_earned": total_points_earned,
+        "points_possible": total_points_possible,
+      })
+    
+    # Recalculate overall progress
+    total_steps = len(steps)
+    completed_steps = sum(1 for sp in step_progress if sp["is_completed"])
+    calculated_percentage = int((completed_steps / total_steps) * 100) if total_steps > 0 else 0
+    
+    # Update progress record if needed
+    if prog.progress_percentage != calculated_percentage:
+      prog.progress_percentage = calculated_percentage
+      if calculated_percentage == 100:
+        prog.status = "completed"
+        if not prog.completed_at:
+          prog.completed_at = datetime.utcnow()
+      elif calculated_percentage > 0:
+        prog.status = "in_progress"
+        if not prog.started_at:
+          prog.started_at = datetime.utcnow()
+      db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "progress": prog.to_dict(),
+      "step_progress": step_progress,
+      "overall_percentage": calculated_percentage,
+      "completed_steps": completed_steps,
+      "total_steps": total_steps,
+    }), 200
+  except Exception as e:
     return jsonify({"success": False, "error": str(e)}), 500
 
 

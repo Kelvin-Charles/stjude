@@ -1,0 +1,5 @@
+Exploring the Program
+Try to find the answers to the following questions. Experiment with some modifications to the code and rerun the program to see what effect the changes have.
+
+What happens if you change range(0, 13) on line 13 to range(0, 80)?
+What happens if you change range(0, 13) on line 13 to range(0, 100)?

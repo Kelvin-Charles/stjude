@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://102.211.196.167:7700'
+const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
 
 export default function MentorDashboard() {
   const { token } = useAuth()

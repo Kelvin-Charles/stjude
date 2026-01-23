@@ -4,7 +4,7 @@ import StudentDashboard from './StudentDashboard'
 import MentorDashboard from './MentorDashboard'
 import ManagerDashboard from './ManagerDashboard'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://102.211.196.167:7700'
+const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
 
 export default function Dashboard() {
   const { user, logout, token } = useAuth()

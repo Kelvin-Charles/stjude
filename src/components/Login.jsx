@@ -87,7 +87,7 @@ export default function Login() {
 
         <div className="mt-6 pt-6 border-t border-gray-100">
           <a 
-            href="https://editor.raspberrypi.org/en/" 
+            href="https://editor.raspberrypi.org/en/projects/blank-python-starter" 
             target="_blank" 
             rel="noopener noreferrer"
             className="flex items-center justify-center w-full px-4 py-3 bg-pink-50 text-pink-600 rounded-xl font-semibold hover:bg-pink-100 transition-colors"

@@ -92,7 +92,7 @@ export default function Login() {
             rel="noopener noreferrer"
             className="flex items-center justify-center w-full px-4 py-3 bg-pink-50 text-pink-600 rounded-xl font-semibold hover:bg-pink-100 transition-colors"
           >
-            <span>🚀 Open Raspberry Pi Editor</span>
+            <span>🚀 Open Editor</span>
           </a>
         </div>
       </div>

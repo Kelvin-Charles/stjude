@@ -1,9 +1,19 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\.html$ - [L]
+  
+  # Don't rewrite files or directories
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteCond %{REQUEST_FILENAME} !-l
-  RewriteRule . /index.html [L]
+  
+  # Don't rewrite for files with these extensions
+  RewriteCond %{REQUEST_URI} !\.(?:css|js|map|jpe?g|gif|png|svg|ico|webp|woff2?|ttf|eot)$ [NC]
+  
+  # Rewrite everything else to index.html
+  RewriteRule ^.*$ /index.html [L]
+</IfModule>
+
+# Fallback for servers without mod_rewrite
+<IfModule !mod_rewrite.c>
+  ErrorDocument 404 /index.html
 </IfModule>

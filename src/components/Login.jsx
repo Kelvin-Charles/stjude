@@ -84,6 +84,17 @@ export default function Login() {
             Register here
           </Link>
         </p>
+
+        <div className="mt-6 pt-6 border-t border-gray-100">
+          <a 
+            href="https://editor.raspberrypi.org/en/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center justify-center w-full px-4 py-3 bg-pink-50 text-pink-600 rounded-xl font-semibold hover:bg-pink-100 transition-colors"
+          >
+            <span>🚀 Open Raspberry Pi Editor</span>
+          </a>
+        </div>
       </div>
     </div>
   )

@@ -20,9 +20,47 @@ from auth import (
 )
 from datetime import datetime
 import os
+import secrets
 
 
 api = Blueprint("api", __name__)
+
+@api.route("/admin/students/<int:student_id>/reset-password", methods=["POST"])
+@require_manager
+def admin_reset_student_password(user, student_id):
+  """
+  Manager/admin can reset a student's password.
+
+  Body:
+    - password (optional): set to this value
+    - generate (optional bool): if true, generate a temporary password
+  """
+  try:
+    data = request.get_json() or {}
+    new_password = data.get("password")
+    generate = bool(data.get("generate")) if "generate" in data else False
+
+    student = User.query.get_or_404(student_id)
+    if student.role != UserRole.STUDENT:
+      return jsonify({"success": False, "error": "Target user must be a student"}), 400
+
+    if generate and not new_password:
+      new_password = secrets.token_urlsafe(8)
+
+    if not new_password or len(str(new_password)) < 4:
+      return jsonify({"success": False, "error": "password must be at least 4 characters"}), 400
+
+    student.set_password(str(new_password))
+    db.session.commit()
+
+    # Return the generated password only if we generated it server-side
+    resp = {"success": True, "message": "Password reset", "student": student.to_dict()}
+    if generate:
+      resp["temporary_password"] = new_password
+    return jsonify(resp), 200
+  except Exception as e:
+    db.session.rollback()
+    return jsonify({"success": False, "error": str(e)}), 500
 
 
 @api.route("/register", methods=["POST"])

@@ -2,11 +2,13 @@ import MentorDashboard from './MentorDashboard'
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 export default function ManagerDashboard() {
   const { token } = useAuth()
   const [students, setStudents] = useState([])
+  const [studentsLoading, setStudentsLoading] = useState(false)
+  const [studentsError, setStudentsError] = useState('')
   const [showReset, setShowReset] = useState(false)
   const [resetForm, setResetForm] = useState({ studentId: '', password: '', generate: true })
   const [resetMsg, setResetMsg] = useState('')
@@ -19,20 +21,36 @@ export default function ManagerDashboard() {
   })
   const [showCreateForm, setShowCreateForm] = useState(false)
 
-  useEffect(() => {
-    const fetchStudents = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/students`, {
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json()
-        if (data.success) setStudents(data.students || [])
-      } catch (e) {
-        // ignore
+  const fetchStudents = async () => {
+    if (!token) return
+    setStudentsLoading(true)
+    setStudentsError('')
+    try {
+      const res = await fetch(`${API_URL}/api/students`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.success) {
+        setStudents([])
+        setStudentsError(data.error || `Could not load students (HTTP ${res.status}).`)
+        return
       }
+      setStudents(data.students || [])
+      if ((data.students || []).length === 0) {
+        setStudentsError('No students found yet. Register a student first.')
+      }
+    } catch (e) {
+      setStudents([])
+      setStudentsError('Network error while loading students.')
+    } finally {
+      setStudentsLoading(false)
     }
-    fetchStudents()
-  }, [token])
+  }
+
+  useEffect(() => {
+    if (showReset) fetchStudents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showReset, token])
 
   const handleResetPassword = async (e) => {
     e.preventDefault()
@@ -139,6 +157,17 @@ export default function ManagerDashboard() {
                   </option>
                 ))}
               </select>
+              <div className="mt-2 flex items-center gap-3 text-sm">
+                {studentsLoading && <span className="text-gray-600">Loading students…</span>}
+                {studentsError && <span className="text-red-600">{studentsError}</span>}
+                <button
+                  type="button"
+                  onClick={fetchStudents}
+                  className="ml-auto text-indigo-600 hover:underline"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

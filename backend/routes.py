@@ -25,6 +25,20 @@ import secrets
 
 api = Blueprint("api", __name__)
 
+@api.route("/students", methods=["GET"])
+@require_mentor
+def list_students(user):
+  """List all active students (for mentors/managers)."""
+  try:
+    students = (
+      User.query.filter(User.role == UserRole.STUDENT, User.is_active.is_(True))
+      .order_by(User.full_name.asc())
+      .all()
+    )
+    return jsonify({"success": True, "students": [s.to_dict() for s in students]}), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
 @api.route("/admin/students/<int:student_id>/reset-password", methods=["POST"])
 @require_manager
 def admin_reset_student_password(user, student_id):

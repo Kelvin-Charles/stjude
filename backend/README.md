@@ -22,7 +22,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The server will start on `http://localhost:5000`
+The server will start on `https://stjude.beetletz.online`
 
 ## API Endpoints
 
@@ -52,16 +52,16 @@ The server will start on `http://localhost:5000`
 
 ```bash
 # Health check
-curl http://localhost:5000/api/health
+curl https://stjude.beetletz.online/api/health
 
 # Get multiplication table
-curl http://localhost:5000/api/multiplication-table?max=12
+curl https://stjude.beetletz.online/api/multiplication-table?max=12
 
 # List projects
-curl http://localhost:5000/api/projects
+curl https://stjude.beetletz.online/api/projects
 
 # Verify password
-curl -X POST http://localhost:5000/api/students/verify-password \
+curl -X POST https://stjude.beetletz.online/api/students/verify-password \
   -H "Content-Type: application/json" \
   -d '{"password": "onlydadas"}'
 ```

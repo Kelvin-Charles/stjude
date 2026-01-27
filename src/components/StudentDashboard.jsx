@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import ReadingResources from './ReadingResources'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
 
 export default function StudentDashboard() {
   const { token, user } = useAuth()

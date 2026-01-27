@@ -53,7 +53,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-The backend will be available at `http://localhost:5000`
+The backend will be available at `https://stjude.beetletz.online`
 
 ### Frontend Setup
 

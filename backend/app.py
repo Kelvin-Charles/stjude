@@ -29,6 +29,20 @@ def health_check():
         'message': 'Flask backend is running'
     }), 200
 
+@app.route('/api/debug/projects', methods=['GET'])
+def debug_projects():
+    """Debug endpoint to list all projects"""
+    projects = Project.query.all()
+    return jsonify({
+        'total': len(projects),
+        'projects': [{
+            'id': p.id,
+            'name': p.name,
+            'is_active': p.is_active,
+            'steps_count': len(p.steps)
+        } for p in projects]
+    }), 200
+
 def init_db():
     """Initialize database tables and default data"""
     with app.app_context():
@@ -1076,6 +1090,515 @@ def init_db():
             # Ensure all steps are released
             updated = False
             for step in ProjectStep.query.filter_by(project_id=ng_project.id).all():
+                if not step.is_released:
+                    step.is_released = True
+                    updated = True
+            if updated:
+                db.session.commit()
+
+        # Ensure WORD-GUESSING-GAME exists and has detailed steps/questions
+        # Try multiple name variations to find the project
+        wg_project = (
+            Project.query.filter(Project.name.ilike("word-guessing-game")).first() or
+            Project.query.filter_by(name="WORD-GUESSING-GAME").first() or
+            Project.query.filter_by(name="word-guessing-game").first()
+        )
+        
+        # Create project entry if it doesn't exist
+        if not wg_project:
+            wg_project = Project(
+                name="WORD-GUESSING-GAME",
+                project_path="WORD-GUESSING-GAME",
+                description="Project: WORD-GUESSING-GAME",
+                difficulty_level="beginner",
+                is_active=True
+            )
+            db.session.add(wg_project)
+            db.session.flush()
+            db.session.commit()
+        else:
+            # Ensure the project is active
+            if not wg_project.is_active:
+                wg_project.is_active = True
+                db.session.commit()
+        
+        if wg_project:
+            wg_steps = (
+                ProjectStep.query.filter_by(project_id=wg_project.id)
+                .order_by(ProjectStep.order_index.asc())
+                .all()
+            )
+
+            if not wg_steps:
+                full_game_code = (
+                    "import random\n\n"
+                    "name = input(\"What is your name? \")\n\n"
+                    "print(\"Good Luck ! \", name)\n\n"
+                    "words = [\n"
+                    "    \"rainbow\",\n"
+                    "    \"computer\",\n"
+                    "    \"science\",\n"
+                    "    \"programming\",\n"
+                    "    \"python\",\n"
+                    "    \"mathematics\",\n"
+                    "    \"player\",\n"
+                    "    \"condition\",\n"
+                    "    \"reverse\",\n"
+                    "    \"water\",\n"
+                    "    \"board\",\n"
+                    "    \"geeks\",\n"
+                    "]\n\n"
+                    "word = random.choice(words)\n\n"
+                    "print(\"Guess the characters\")\n\n"
+                    "guesses = \"\"\n"
+                    "turns = 12\n\n"
+                    "while turns > 0:\n"
+                    "    failed = 0\n\n"
+                    "    for char in word:\n"
+                    "        if char in guesses:\n"
+                    "            print(char, end=\" \")\n\n"
+                    "        else:\n"
+                    "            print(\"_\", end=\" \")\n"
+                    "            failed += 1\n\n"
+                    "    if failed == 0:\n"
+                    "        print(\"\\nYou Win\")\n"
+                    "        print(\"The word is: \", word)\n"
+                    "        break\n\n"
+                    "    print()\n"
+                    "    guess = input(\"guess a character: \")\n\n"
+                    "    guesses += guess\n\n"
+                    "    if guess not in word:\n"
+                    "        turns -= 1\n"
+                    "        print(\"Wrong\")\n"
+                    "        print(\"You have\", turns, \"more guesses\")\n\n"
+                    "        if turns == 0:\n"
+                    "            print(\"You Loose\")"
+                )
+
+                # Step 1: Welcome and Word Selection
+                step1_code_snippets = json.dumps(
+                    [
+                        {
+                            "title": "Name Input and Welcome",
+                            "code": "name = input(\"What is your name? \")\nprint(\"Good Luck ! \", name)",
+                            "explanation": "Get the player's name and greet them with a personalized message.",
+                        },
+                        {
+                            "title": "Word List and Selection",
+                            "code": "words = [\"rainbow\", \"computer\", \"science\", ...]\nword = random.choice(words)",
+                            "explanation": "Define a list of possible words and randomly select one for the game.",
+                        },
+                    ]
+                )
+                step1 = ProjectStep(
+                    project_id=wg_project.id,
+                    order_index=1,
+                    title="Step 1: Welcome and Word Selection",
+                    content=(
+                        "We start by greeting the player and asking for their name. Then we create a list of words "
+                        "and use random.choice() to pick one secret word for the game. This word will be what the "
+                        "player tries to guess character by character."
+                    ),
+                    code_snippet=step1_code_snippets,
+                    full_code=full_game_code,
+                    is_released=True,
+                )
+                db.session.add(step1)
+                db.session.flush()
+
+                q1_list = [
+                    (
+                        "What does random.choice(words) do?",
+                        "Picks a random word from the words list",
+                        "Sorts the words alphabetically",
+                        "Removes a word from the list",
+                        "Counts how many words are in the list",
+                        "A",
+                        10,
+                    ),
+                    (
+                        "Why do we ask for the player's name?",
+                        "To store it in a database",
+                        "To personalize the greeting message",
+                        "To use as the secret word",
+                        "It's not necessary",
+                        "B",
+                        5,
+                    ),
+                    (
+                        "How many words are in the words list?",
+                        "8",
+                        "10",
+                        "12",
+                        "15",
+                        "C",
+                        5,
+                    ),
+                    (
+                        "What happens if the words list is empty?",
+                        "random.choice will raise an IndexError",
+                        "The game will still work",
+                        "A default word is used",
+                        "The program crashes",
+                        "A",
+                        10,
+                    ),
+                    (
+                        "Which module do we need to import for random.choice?",
+                        "math",
+                        "random",
+                        "string",
+                        "os",
+                        "B",
+                        5,
+                    ),
+                    (
+                        "What type of data structure is 'words'?",
+                        "A dictionary",
+                        "A list",
+                        "A tuple",
+                        "A string",
+                        "B",
+                        5,
+                    ),
+                ]
+                for prompt, a, b, c, d, correct, pts in q1_list:
+                    db.session.add(
+                        ProjectStepQuestion(
+                            step_id=step1.id,
+                            prompt=prompt,
+                            option_a=a,
+                            option_b=b,
+                            option_c=c,
+                            option_d=d,
+                            correct_option=correct,
+                            points=pts,
+                        )
+                    )
+
+                # Step 2: Display Logic
+                step2_code_snippets = json.dumps(
+                    [
+                        {
+                            "title": "Initialize Game Variables",
+                            "code": "guesses = \"\"\nturns = 12",
+                            "explanation": "Set up guesses string to track guessed characters and turns counter for remaining attempts.",
+                        },
+                        {
+                            "title": "Display Word Progress",
+                            "code": "for char in word:\n    if char in guesses:\n        print(char, end=\" \")\n    else:\n        print(\"_\", end=\" \")\n        failed += 1",
+                            "explanation": "Loop through each character in the word, showing it if guessed, or underscore if not. Count failed (unguessed) characters.",
+                        },
+                    ]
+                )
+                step2 = ProjectStep(
+                    project_id=wg_project.id,
+                    order_index=2,
+                    title="Step 2: Display Logic - Showing Progress",
+                    content=(
+                        "We initialize 'guesses' as an empty string to track all guessed characters, and 'turns' to 12 "
+                        "for the maximum attempts. Then we loop through each character in the secret word, displaying "
+                        "the character if it's been guessed, or an underscore if not. We also count how many characters "
+                        "are still unguessed (failed)."
+                    ),
+                    code_snippet=step2_code_snippets,
+                    full_code=full_game_code,
+                    is_released=True,
+                )
+                db.session.add(step2)
+                db.session.flush()
+
+                q2_list = [
+                    (
+                        "What does 'guesses = \"\"' initialize?",
+                        "An empty list",
+                        "An empty string to store guessed characters",
+                        "A number",
+                        "A boolean value",
+                        "B",
+                        5,
+                    ),
+                    (
+                        "How many turns does the player start with?",
+                        "10",
+                        "11",
+                        "12",
+                        "15",
+                        "C",
+                        5,
+                    ),
+                    (
+                        "What does 'failed' count?",
+                        "Total guesses made",
+                        "Number of characters still unguessed",
+                        "Wrong guesses",
+                        "Correct guesses",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What is displayed if a character hasn't been guessed?",
+                        "The character itself",
+                        "An underscore (_)",
+                        "A space",
+                        "Nothing",
+                        "B",
+                        5,
+                    ),
+                    (
+                        "What does 'end=\" \"' do in the print statement?",
+                        "Ends the program",
+                        "Prints a space instead of newline after each character",
+                        "Adds a newline",
+                        "Stops the loop",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "Why do we check 'if char in guesses'?",
+                        "To see if the character is in the word",
+                        "To see if the player has already guessed this character",
+                        "To count the characters",
+                        "To remove the character",
+                        "B",
+                        10,
+                    ),
+                ]
+                for prompt, a, b, c, d, correct, pts in q2_list:
+                    db.session.add(
+                        ProjectStepQuestion(
+                            step_id=step2.id,
+                            prompt=prompt,
+                            option_a=a,
+                            option_b=b,
+                            option_c=c,
+                            option_d=d,
+                            correct_option=correct,
+                            points=pts,
+                        )
+                    )
+
+                # Step 3: Guess Loop and Turn Management
+                step3_code_snippets = json.dumps(
+                    [
+                        {
+                            "title": "Main Game Loop",
+                            "code": "while turns > 0:\n    # Display word progress\n    # Get guess\n    # Check if guess is correct",
+                            "explanation": "The while loop continues as long as the player has turns remaining.",
+                        },
+                        {
+                            "title": "Getting and Processing Guess",
+                            "code": "guess = input(\"guess a character: \")\nguesses += guess\n\nif guess not in word:\n    turns -= 1\n    print(\"Wrong\")\n    print(\"You have\", turns, \"more guesses\")",
+                            "explanation": "Get player's guess, add it to guesses string. If wrong, decrease turns and inform the player.",
+                        },
+                    ]
+                )
+                step3 = ProjectStep(
+                    project_id=wg_project.id,
+                    order_index=3,
+                    title="Step 3: Guess Loop and Turn Management",
+                    content=(
+                        "The main game loop runs while turns > 0. In each iteration, we display the current word progress, "
+                        "get a character guess from the player, and add it to the 'guesses' string. If the guessed character "
+                        "is not in the word, we decrease the turns counter and inform the player they're wrong."
+                    ),
+                    code_snippet=step3_code_snippets,
+                    full_code=full_game_code,
+                    is_released=True,
+                )
+                db.session.add(step3)
+                db.session.flush()
+
+                q3_list = [
+                    (
+                        "When does the while loop stop?",
+                        "When turns equals 12",
+                        "When turns becomes 0 or less",
+                        "When the word is guessed",
+                        "It never stops",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What happens when 'guesses += guess' executes?",
+                        "The guess is added to the guesses string",
+                        "The guess is removed",
+                        "The guesses string is cleared",
+                        "Nothing happens",
+                        "A",
+                        5,
+                    ),
+                    (
+                        "What happens if the guessed character is not in the word?",
+                        "Turns increases",
+                        "Turns decreases by 1",
+                        "Turns stays the same",
+                        "The game ends immediately",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "Can a player guess the same character multiple times?",
+                        "No, it's prevented",
+                        "Yes, but it doesn't help",
+                        "Yes, and it counts as correct each time",
+                        "The program crashes",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What is printed when a guess is wrong?",
+                        "Nothing",
+                        "Only 'Wrong'",
+                        "'Wrong' and remaining guesses",
+                        "The secret word",
+                        "C",
+                        5,
+                    ),
+                    (
+                        "Why do we use 'turns -= 1' instead of 'turns = turns - 1'?",
+                        "It's shorter and does the same thing",
+                        "It's faster",
+                        "It prevents errors",
+                        "Both A and B are correct",
+                        "A",
+                        5,
+                    ),
+                ]
+                for prompt, a, b, c, d, correct, pts in q3_list:
+                    db.session.add(
+                        ProjectStepQuestion(
+                            step_id=step3.id,
+                            prompt=prompt,
+                            option_a=a,
+                            option_b=b,
+                            option_c=c,
+                            option_d=d,
+                            correct_option=correct,
+                            points=pts,
+                        )
+                    )
+
+                # Step 4: Win/Lose Conditions
+                step4_code_snippets = json.dumps(
+                    [
+                        {
+                            "title": "Win Condition",
+                            "code": "if failed == 0:\n    print(\"\\nYou Win\")\n    print(\"The word is: \", word)\n    break",
+                            "explanation": "If no characters are unguessed (failed == 0), the player wins and we break out of the loop.",
+                        },
+                        {
+                            "title": "Lose Condition",
+                            "code": "if turns == 0:\n    print(\"You Loose\")",
+                            "explanation": "If turns reaches 0, the player loses and the game ends.",
+                        },
+                        {
+                            "title": "Full Program",
+                            "code": full_game_code,
+                            "explanation": "Complete reference for the word guessing game.",
+                        },
+                    ]
+                )
+                step4 = ProjectStep(
+                    project_id=wg_project.id,
+                    order_index=4,
+                    title="Step 4: Win and Lose Conditions",
+                    content=(
+                        "The game ends in two ways: (1) If 'failed' equals 0, meaning all characters have been guessed, "
+                        "the player wins and we break out of the loop. (2) If 'turns' reaches 0, meaning the player ran out "
+                        "of attempts, they lose. Review the full program to see how all pieces work together!"
+                    ),
+                    code_snippet=step4_code_snippets,
+                    full_code=full_game_code,
+                    is_released=True,
+                )
+                db.session.add(step4)
+                db.session.flush()
+
+                q4_list = [
+                    (
+                        "When does the player win?",
+                        "When they guess any character",
+                        "When failed equals 0 (all characters guessed)",
+                        "When turns equals 12",
+                        "When they guess the first character",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What does 'break' do in the win condition?",
+                        "Stops the program completely",
+                        "Exits the while loop immediately",
+                        "Resets the game",
+                        "Prints an error",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What happens when turns reaches 0?",
+                        "The player automatically wins",
+                        "The game continues",
+                        "The player loses and 'You Loose' is printed",
+                        "The word is revealed",
+                        "C",
+                        10,
+                    ),
+                    (
+                        "How can a player win the game?",
+                        "By guessing any character correctly",
+                        "By guessing all characters in the word",
+                        "By using all 12 turns",
+                        "By guessing the word length",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What is the relationship between 'failed' and winning?",
+                        "failed must be greater than 0 to win",
+                        "failed must equal 0 to win",
+                        "failed doesn't matter",
+                        "failed must be negative to win",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "If the word is 'python' and player guesses 'p', 'y', 't', 'h', 'o', 'n', what happens?",
+                        "They lose",
+                        "They win because failed becomes 0",
+                        "They need one more guess",
+                        "The game crashes",
+                        "B",
+                        10,
+                    ),
+                    (
+                        "What is printed when the player wins?",
+                        "Only 'You Win'",
+                        "'You Win' and the secret word",
+                        "Only the secret word",
+                        "Nothing",
+                        "B",
+                        5,
+                    ),
+                ]
+                for prompt, a, b, c, d, correct, pts in q4_list:
+                    db.session.add(
+                        ProjectStepQuestion(
+                            step_id=step4.id,
+                            prompt=prompt,
+                            option_a=a,
+                            option_b=b,
+                            option_c=c,
+                            option_d=d,
+                            correct_option=correct,
+                            points=pts,
+                        )
+                    )
+
+                db.session.commit()
+
+            # Ensure all steps are released
+            updated = False
+            for step in ProjectStep.query.filter_by(project_id=wg_project.id).all():
                 if not step.is_released:
                     step.is_released = True
                     updated = True

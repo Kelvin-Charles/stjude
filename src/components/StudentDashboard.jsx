@@ -9,6 +9,8 @@ export default function StudentDashboard() {
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedProject, setSelectedProject] = useState(null)
+  const [selectedProjectForSubmission, setSelectedProjectForSubmission] = useState(null)
+  const [showFinalProjectSubmission, setShowFinalProjectSubmission] = useState(false)
   const [leaderboard, setLeaderboard] = useState([])
   const [myRank, setMyRank] = useState(null)
   const [myPoints, setMyPoints] = useState(0)
@@ -126,6 +128,21 @@ export default function StudentDashboard() {
 
         {activeTab === 'projects' && (
           <>
+            {/* Final Project Submission Section */}
+            <div className="bg-white rounded-xl p-6 shadow-lg mb-6 border-2 border-purple-300">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-800 mb-2">🎯 Final Project Submission</h3>
+                  <p className="text-gray-600">Submit your final project work for evaluation (not tied to any specific project)</p>
+                </div>
+                <button
+                  onClick={() => setShowFinalProjectSubmission(true)}
+                  className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 font-semibold text-lg"
+                >
+                  Submit Final Project
+                </button>
+              </div>
+            </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {projects.map((project) => (
@@ -161,6 +178,12 @@ export default function StudentDashboard() {
               >
                 View Details
               </button>
+              <button
+                onClick={() => setSelectedProjectForSubmission({...project, submissionType: 'project'})}
+                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+              >
+                📤 Submit Project
+              </button>
             </div>
           </div>
         ))}
@@ -173,6 +196,28 @@ export default function StudentDashboard() {
           onUpdate={updateProgress}
           token={token}
           onLeaderboardUpdate={fetchLeaderboard}
+        />
+      )}
+
+      {selectedProjectForSubmission && (
+        <SubmissionModal
+          project={selectedProjectForSubmission}
+          onClose={() => setSelectedProjectForSubmission(null)}
+          token={token}
+          onSuccess={() => {
+            setSelectedProjectForSubmission(null)
+            fetchProjects()
+          }}
+        />
+      )}
+
+      {showFinalProjectSubmission && (
+        <FinalProjectSubmissionModal
+          onClose={() => setShowFinalProjectSubmission(false)}
+          token={token}
+          onSuccess={() => {
+            setShowFinalProjectSubmission(false)
+          }}
         />
       )}
           </>
@@ -657,6 +702,505 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
             )}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+function SubmissionModal({ project, onClose, token, onSuccess }) {
+  const [file, setFile] = useState(null)
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [submissions, setSubmissions] = useState([])
+  const [loadingSubmissions, setLoadingSubmissions] = useState(true)
+
+  useEffect(() => {
+    fetchSubmissions()
+  }, [project.id])
+
+  const fetchSubmissions = async () => {
+    try {
+      const submissionType = project.submissionType || 'project'
+      const res = await fetch(`${API_URL}/api/projects/${project.id}/submissions?submission_type=${submissionType}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSubmissions(data.submissions || [])
+      }
+    } catch (err) {
+      console.error('Error fetching submissions:', err)
+    } finally {
+      setLoadingSubmissions(false)
+    }
+  }
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0]
+    if (selectedFile) {
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        setError('File size must be less than 10MB')
+        return
+      }
+      setFile(selectedFile)
+      setError('')
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!file) {
+      setError('Please select a file to upload')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('notes', notes)
+      formData.append('submission_type', project.submissionType || 'project')
+
+      const res = await fetch(`${API_URL}/api/projects/${project.id}/submit`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          // Don't set Content-Type - browser will set it automatically with boundary for FormData
+        },
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        setFile(null)
+        setNotes('')
+        await fetchSubmissions()
+        if (onSuccess) onSuccess()
+      } else {
+        setError(data.error || 'Failed to submit project')
+      }
+    } catch (err) {
+      console.error('Error submitting project:', err)
+      setError('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDownload = async (submissionId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/submissions/${submissionId}/download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        const submission = submissions.find(s => s.id === submissionId)
+        a.download = submission?.filename || 'download'
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
+    } catch (err) {
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+  }
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-2xl font-bold mb-2">
+              {project.submissionType === 'final_test' ? '🎯 Final Project Test: ' : 'Submit Project: '}{project.name}
+            </h3>
+            <p className="text-gray-600">
+              {project.submissionType === 'final_test' 
+                ? 'Upload your final project test/exam file' 
+                : 'Upload your completed project file'}
+            </p>
+            {project.submissionType === 'final_test' && (
+              <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-sm text-purple-800">
+                <strong>⚠️ Final Test:</strong> This is your final submission for evaluation. Make sure your work is complete.
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-2xl"
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">
+              Select File
+            </label>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              className="w-full px-4 py-2 border rounded-lg"
+              accept=".py,.txt,.pdf,.doc,.docx,.zip,.rar,.7z,.jpg,.jpeg,.png,.gif"
+            />
+            {file && (
+              <p className="mt-2 text-sm text-gray-600">
+                Selected: {file.name} ({formatFileSize(file.size)})
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">
+              Notes (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows="3"
+              placeholder="Add any notes about your submission..."
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-100 text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting || !file}
+            className="w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+          >
+            {submitting ? 'Uploading...' : '📤 Submit Project'}
+          </button>
+        </form>
+
+        <div className="border-t pt-4">
+          <h4 className="font-bold text-lg mb-3">
+            Your Previous {project.submissionType === 'final_test' ? 'Final Test' : 'Project'} Submissions
+          </h4>
+          {loadingSubmissions ? (
+            <p className="text-gray-600">Loading...</p>
+          ) : submissions.length === 0 ? (
+            <p className="text-gray-600">No submissions yet</p>
+          ) : (
+            <div className="space-y-2">
+              {submissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="border rounded-lg p-3 flex justify-between items-center"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">{submission.filename}</p>
+                    <p className="text-sm text-gray-600">
+                      Submitted: {formatDate(submission.submitted_at)}
+                      {submission.file_size && ` • ${formatFileSize(submission.file_size)}`}
+                    </p>
+                    {submission.notes && (
+                      <p className="text-sm text-gray-500 mt-1">Notes: {submission.notes}</p>
+                    )}
+                    <div className="flex gap-2 mt-1">
+                      {submission.submission_type === 'final_test' && (
+                        <span className="inline-block px-2 py-1 rounded text-xs bg-purple-100 text-purple-800">
+                          🎯 Final Test
+                        </span>
+                      )}
+                      {submission.status && (
+                        <span className={`inline-block px-2 py-1 rounded text-xs ${
+                          submission.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          submission.status === 'needs_revision' ? 'bg-yellow-100 text-yellow-800' :
+                          submission.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {submission.status}
+                        </span>
+                      )}
+                    </div>
+                    {submission.review_notes && (
+                      <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                        <strong>Review:</strong> {submission.review_notes}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDownload(submission.id)}
+                    className="ml-4 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm"
+                  >
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FinalProjectSubmissionModal({ onClose, token, onSuccess }) {
+  const [file, setFile] = useState(null)
+  const [notes, setNotes] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const [submissions, setSubmissions] = useState([])
+  const [loadingSubmissions, setLoadingSubmissions] = useState(true)
+
+  useEffect(() => {
+    fetchSubmissions()
+  }, [])
+
+  const fetchSubmissions = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/final-project/submissions`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const data = await res.json()
+      if (data.success) {
+        setSubmissions(data.submissions || [])
+      }
+    } catch (err) {
+      console.error('Error fetching final project submissions:', err)
+    } finally {
+      setLoadingSubmissions(false)
+    }
+  }
+
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0]
+    if (selectedFile) {
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        setError('File size must be less than 10MB')
+        return
+      }
+      setFile(selectedFile)
+      setError('')
+    }
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!file) {
+      setError('Please select a file to upload')
+      return
+    }
+
+    setSubmitting(true)
+    setError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('notes', notes)
+
+      const res = await fetch(`${API_URL}/api/final-project/submit`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      })
+
+      const data = await res.json()
+
+      if (data.success) {
+        setFile(null)
+        setNotes('')
+        await fetchSubmissions()
+        if (onSuccess) onSuccess()
+      } else {
+        setError(data.error || 'Failed to submit final project')
+      }
+    } catch (err) {
+      console.error('Error submitting final project:', err)
+      setError('Network error. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDownload = async (submissionId) => {
+    try {
+      const res = await fetch(`${API_URL}/api/submissions/${submissionId}/download`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      
+      if (res.ok) {
+        const blob = await res.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        const submission = submissions.find(s => s.id === submissionId)
+        a.download = submission?.filename || 'download'
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
+    } catch (err) {
+      console.error('Error downloading file:', err)
+    }
+  }
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + ' B'
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+  }
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString()
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h3 className="text-2xl font-bold mb-2">🎯 Final Project Submission</h3>
+            <p className="text-gray-600">Upload your final project work for evaluation</p>
+            <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded text-sm text-purple-800">
+              <strong>⚠️ Important:</strong> This is your final project submission. Make sure your work is complete and ready for evaluation.
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 text-2xl"
+          >
+            ×
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 mb-6">
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">
+              Select File
+            </label>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              className="w-full px-4 py-2 border rounded-lg"
+              accept=".py,.txt,.pdf,.doc,.docx,.zip,.rar,.7z,.jpg,.jpeg,.png,.gif"
+            />
+            {file && (
+              <p className="mt-2 text-sm text-gray-600">
+                Selected: {file.name} ({formatFileSize(file.size)})
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block mb-2 font-medium text-gray-700">
+              Notes (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows="3"
+              placeholder="Add any notes about your final project submission..."
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 rounded-lg bg-red-100 text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting || !file}
+            className="w-full bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+          >
+            {submitting ? 'Uploading...' : '🎯 Submit Final Project'}
+          </button>
+        </form>
+
+        <div className="border-t pt-4">
+          <h4 className="font-bold text-lg mb-3">Your Previous Final Project Submissions</h4>
+          {loadingSubmissions ? (
+            <p className="text-gray-600">Loading...</p>
+          ) : submissions.length === 0 ? (
+            <p className="text-gray-600">No final project submissions yet</p>
+          ) : (
+            <div className="space-y-2">
+              {submissions.map((submission) => (
+                <div
+                  key={submission.id}
+                  className="border rounded-lg p-3 flex justify-between items-center"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">{submission.filename}</p>
+                    <p className="text-sm text-gray-600">
+                      Submitted: {formatDate(submission.submitted_at)}
+                      {submission.file_size && ` • ${formatFileSize(submission.file_size)}`}
+                    </p>
+                    {submission.notes && (
+                      <p className="text-sm text-gray-500 mt-1">Notes: {submission.notes}</p>
+                    )}
+                    <div className="flex gap-2 mt-1">
+                      <span className="inline-block px-2 py-1 rounded text-xs bg-purple-100 text-purple-800">
+                        🎯 Final Project
+                      </span>
+                      {submission.status && (
+                        <span className={`inline-block px-2 py-1 rounded text-xs ${
+                          submission.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          submission.status === 'needs_revision' ? 'bg-yellow-100 text-yellow-800' :
+                          submission.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {submission.status}
+                        </span>
+                      )}
+                    </div>
+                    {submission.review_notes && (
+                      <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
+                        <strong>Review:</strong> {submission.review_notes}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleDownload(submission.id)}
+                    className="ml-4 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm"
+                  >
+                    Download
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

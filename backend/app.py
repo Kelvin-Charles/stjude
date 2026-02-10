@@ -1,12 +1,12 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from models import db, User, Project, ProjectProgress, UserRole, ProjectStep, ProjectStepQuestion
+from models import db, User, Project, ProjectProgress, UserRole, ProjectStep, ProjectStepQuestion, ProjectSubmission
 from routes import api
 import os
 import json
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for React frontend
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}})  # Enable CORS for React frontend
 
 # Configuration
 basedir = os.path.abspath(os.path.dirname(__file__))

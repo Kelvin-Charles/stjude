@@ -9,6 +9,7 @@ from models import (
   ProjectStepQuestion,
   StudentStepAnswer,
   Resource,
+  ProjectSubmission,
 )
 from auth import (
   generate_token,
@@ -21,6 +22,8 @@ from auth import (
 from datetime import datetime
 import os
 import secrets
+from werkzeug.utils import secure_filename
+from flask import send_file
 
 
 api = Blueprint("api", __name__)
@@ -620,6 +623,270 @@ def get_resource(user, resource_id):
     if not res.is_active:
       return jsonify({"success": False, "error": "Resource not found"}), 404
     return jsonify({"success": True, "resource": res.to_dict()}), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Project Submission Endpoints
+ALLOWED_EXTENSIONS = {'py', 'txt', 'pdf', 'doc', 'docx', 'zip', 'rar', '7z', 'jpg', 'jpeg', 'png', 'gif'}
+
+def allowed_file(filename):
+  return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@api.route("/projects/<int:project_id>/submit", methods=["POST"])
+@require_student
+def submit_project(user, project_id):
+  """Student uploads a project file"""
+  try:
+    from werkzeug.utils import secure_filename
+    from flask import send_file
+    
+    project = Project.query.get_or_404(project_id)
+    
+    if 'file' not in request.files:
+      return jsonify({"success": False, "error": "No file provided"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+      return jsonify({"success": False, "error": "No file selected"}), 400
+    
+    if not allowed_file(file.filename):
+      return jsonify({"success": False, "error": f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+    
+    # Create uploads directory if it doesn't exist
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads', 'submissions')
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # Generate unique filename
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    safe_filename = secure_filename(file.filename)
+    unique_filename = f"{user.id}_{project_id}_{timestamp}_{safe_filename}"
+    file_path = os.path.join(uploads_dir, unique_filename)
+    
+    # Save file
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+    
+    # Create submission record
+    submission_type = request.form.get('submission_type', 'project')  # 'project' or 'final_test'
+    submission = ProjectSubmission(
+      student_id=user.id,
+      project_id=project_id,
+      filename=file.filename,
+      file_path=file_path,
+      file_size=file_size,
+      mime_type=file.content_type or 'application/octet-stream',
+      notes=request.form.get('notes', ''),
+      status='submitted',
+      submission_type=submission_type
+    )
+    db.session.add(submission)
+    db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "message": "Project submitted successfully",
+      "submission": submission.to_dict()
+    }), 201
+  except Exception as e:
+    db.session.rollback()
+    import traceback
+    error_msg = str(e)
+    traceback.print_exc()
+    print(f"Error submitting project: {error_msg}")
+    return jsonify({"success": False, "error": error_msg}), 500
+
+
+@api.route("/projects/<int:project_id>/submissions", methods=["GET"])
+@require_student
+def my_project_submissions(user, project_id):
+  """Get student's own submissions for a project"""
+  try:
+    submission_type = request.args.get('submission_type')
+    query = ProjectSubmission.query.filter_by(
+      student_id=user.id,
+      project_id=project_id
+    )
+    if submission_type:
+      query = query.filter_by(submission_type=submission_type)
+    submissions = query.order_by(ProjectSubmission.submitted_at.desc()).all()
+    
+    return jsonify({
+      "success": True,
+      "submissions": [s.to_dict() for s in submissions]
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/submissions", methods=["GET"])
+@require_student
+def my_submissions(user):
+  """Get all of student's submissions"""
+  try:
+    submissions = ProjectSubmission.query.filter_by(
+      student_id=user.id
+    ).order_by(ProjectSubmission.submitted_at.desc()).all()
+    
+    return jsonify({
+      "success": True,
+      "submissions": [s.to_dict() for s in submissions]
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/submissions/<int:submission_id>/download", methods=["GET"])
+@require_auth
+def download_submission(user, submission_id):
+  """Download a submission file"""
+  try:
+    from flask import send_file
+    
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    
+    # Students can only download their own, mentors/managers can download any
+    if user.role == UserRole.STUDENT and submission.student_id != user.id:
+      return jsonify({"success": False, "error": "Access denied"}), 403
+    
+    if not os.path.exists(submission.file_path):
+      return jsonify({"success": False, "error": "File not found"}), 404
+    
+    return send_file(
+      submission.file_path,
+      as_attachment=True,
+      download_name=submission.filename,
+      mimetype=submission.mime_type or 'application/octet-stream'
+    )
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/admin/submissions", methods=["GET"])
+@require_mentor
+def list_all_submissions(user):
+  """List all submissions (for mentors/managers)"""
+  try:
+    project_id = request.args.get('project_id', type=int)
+    student_id = request.args.get('student_id', type=int)
+    
+    query = ProjectSubmission.query
+    
+    if project_id:
+      query = query.filter_by(project_id=project_id)
+    if student_id:
+      query = query.filter_by(student_id=student_id)
+    
+    submissions = query.order_by(ProjectSubmission.submitted_at.desc()).all()
+    
+    return jsonify({
+      "success": True,
+      "submissions": [s.to_dict() for s in submissions]
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/submissions/<int:submission_id>/review", methods=["POST"])
+@require_mentor
+def review_submission(user, submission_id):
+  """Add review notes and update status"""
+  try:
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    data = request.get_json() or {}
+    
+    submission.review_notes = data.get('review_notes', '')
+    submission.status = data.get('status', submission.status)
+    submission.reviewed_by = user.id
+    submission.reviewed_at = datetime.utcnow()
+    
+    db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "message": "Submission reviewed",
+      "submission": submission.to_dict()
+    }), 200
+  except Exception as e:
+    db.session.rollback()
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/final-project/submit", methods=["POST"])
+@require_student
+def submit_final_project(user):
+  """Student uploads final project (not tied to any specific project)"""
+  try:
+    from werkzeug.utils import secure_filename
+    from flask import send_file
+    
+    if 'file' not in request.files:
+      return jsonify({"success": False, "error": "No file provided"}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+      return jsonify({"success": False, "error": "No file selected"}), 400
+    
+    if not allowed_file(file.filename):
+      return jsonify({"success": False, "error": f"File type not allowed. Allowed: {', '.join(ALLOWED_EXTENSIONS)}"}), 400
+    
+    # Create uploads directory if it doesn't exist
+    uploads_dir = os.path.join(os.path.dirname(__file__), 'uploads', 'submissions')
+    os.makedirs(uploads_dir, exist_ok=True)
+    
+    # Generate unique filename
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    safe_filename = secure_filename(file.filename)
+    unique_filename = f"{user.id}_final_{timestamp}_{safe_filename}"
+    file_path = os.path.join(uploads_dir, unique_filename)
+    
+    # Save file
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+    
+    # Create submission record (project_id is None for final project)
+    submission = ProjectSubmission(
+      student_id=user.id,
+      project_id=None,  # Final project is not tied to any specific project
+      filename=file.filename,
+      file_path=file_path,
+      file_size=file_size,
+      mime_type=file.content_type or 'application/octet-stream',
+      notes=request.form.get('notes', ''),
+      status='submitted',
+      submission_type='final_project'
+    )
+    db.session.add(submission)
+    db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "message": "Final project submitted successfully",
+      "submission": submission.to_dict()
+    }), 201
+  except Exception as e:
+    db.session.rollback()
+    import traceback
+    error_msg = str(e)
+    traceback.print_exc()
+    print(f"Error submitting final project: {error_msg}")
+    return jsonify({"success": False, "error": error_msg}), 500
+
+
+@api.route("/final-project/submissions", methods=["GET"])
+@require_student
+def my_final_project_submissions(user):
+  """Get student's final project submissions"""
+  try:
+    submissions = ProjectSubmission.query.filter_by(
+      student_id=user.id,
+      submission_type='final_project'
+    ).order_by(ProjectSubmission.submitted_at.desc()).all()
+    
+    return jsonify({
+      "success": True,
+      "submissions": [s.to_dict() for s in submissions]
+    }), 200
   except Exception as e:
     return jsonify({"success": False, "error": str(e)}), 500
 

@@ -224,3 +224,47 @@ class Resource(db.Model):
       "is_active": self.is_active,
     }
 
+
+class ProjectSubmission(db.Model):
+  __tablename__ = "project_submissions"
+
+  id = db.Column(db.Integer, primary_key=True)
+  student_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+  project_id = db.Column(db.Integer, db.ForeignKey("projects.id"), nullable=True, index=True)  # Nullable for final project submissions
+  filename = db.Column(db.String(500), nullable=False)
+  file_path = db.Column(db.String(1000), nullable=False)
+  file_size = db.Column(db.Integer)  # Size in bytes
+  mime_type = db.Column(db.String(100))
+  notes = db.Column(db.Text)
+  submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+  reviewed_at = db.Column(db.DateTime)
+  reviewed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
+  review_notes = db.Column(db.Text)
+  status = db.Column(db.String(50), default="submitted")  # submitted, reviewed, approved, needs_revision
+  submission_type = db.Column(db.String(50), default="project")  # project, final_test
+
+  student = db.relationship("User", foreign_keys=[student_id], backref="submissions")
+  project = db.relationship("Project", backref="submissions")
+  reviewer = db.relationship("User", foreign_keys=[reviewed_by])
+
+  def to_dict(self):
+    return {
+      "id": self.id,
+      "student_id": self.student_id,
+      "student_name": self.student.full_name if self.student else None,
+      "project_id": self.project_id,
+      "project_name": self.project.name if self.project else None,
+      "filename": self.filename,
+      "file_path": self.file_path,
+      "file_size": self.file_size,
+      "mime_type": self.mime_type,
+      "notes": self.notes,
+      "submitted_at": self.submitted_at.isoformat() if self.submitted_at else None,
+      "reviewed_at": self.reviewed_at.isoformat() if self.reviewed_at else None,
+      "reviewed_by": self.reviewed_by,
+      "reviewer_name": self.reviewer.full_name if self.reviewer else None,
+      "review_notes": self.review_notes,
+      "status": self.status,
+      "submission_type": self.submission_type,
+    }
+

@@ -13,6 +13,10 @@ services:
     volumes:
       # Persist the SQLite DB outside the container (optional)
       - ./backend/stjude.db:/app/stjude.db
+      # Mount uploads directory for PDFs and file uploads
+      - ./backend/uploads:/app/uploads
+      # Mount projects directory for project files
+      - ./backend/projects:/app/projects
     # If you later add env vars (e.g. JWT_SECRET_KEY), you can use:
     # env_file:
     #   - ./backend/.env

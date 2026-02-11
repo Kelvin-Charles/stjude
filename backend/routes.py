@@ -624,7 +624,10 @@ def run_project(user, project_id):
 def list_resources(user):
   try:
     # Scan uploads/books directory for PDF files and auto-create resources
-    books_dir = os.path.join(os.path.dirname(__file__), "uploads", "books")
+    # routes.py is in backend/, so dirname(__file__) gives us backend/ directory
+    # In container: /app, so books_dir will be /app/uploads/books
+    backend_dir = os.path.dirname(__file__)
+    books_dir = os.path.join(backend_dir, "uploads", "books")
     if os.path.exists(books_dir):
       # Get a default creator (first mentor/manager, or current user)
       default_creator = (
@@ -661,9 +664,11 @@ def list_resources(user):
                 is_active=True
               )
               db.session.add(new_resource)
+              print(f"Added new resource: {title} -> {resource_path}")
       
       # Commit any new resources
       db.session.commit()
+      print(f"Scanned {books_dir}, found PDFs and committed resources")
     
     # Return all active resources
     resources = (
@@ -676,6 +681,9 @@ def list_resources(user):
     ), 200
   except Exception as e:
     db.session.rollback()
+    import traceback
+    print(f"Error in list_resources: {str(e)}")
+    print(traceback.format_exc())
     return jsonify({"success": False, "error": str(e)}), 500
 
 

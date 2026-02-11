@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { toast } from 'react-toastify'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
 
@@ -161,11 +162,17 @@ export default function MentorDashboard() {
       if (data.success) {
         setSubmissionContent(data)
       } else {
-        alert('Error loading file: ' + data.error)
+        toast.error('Error loading file: ' + data.error, {
+          position: "top-right",
+          autoClose: 3000,
+        })
       }
     } catch (error) {
       console.error('Error fetching submission content:', error)
-      alert('Error loading file content')
+      toast.error('Error loading file content', {
+        position: "top-right",
+        autoClose: 3000,
+      })
     }
   }
 
@@ -194,15 +201,24 @@ export default function MentorDashboard() {
       })
       const data = await response.json()
       if (data.success) {
-        alert('Review submitted successfully!')
+        toast.success('Review submitted successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+        })
         setSelectedSubmission(null)
         fetchSubmissions()
       } else {
-        alert('Error submitting review: ' + data.error)
+        toast.error('Error submitting review: ' + data.error, {
+          position: "top-right",
+          autoClose: 3000,
+        })
       }
     } catch (error) {
       console.error('Error reviewing submission:', error)
-      alert('Error submitting review')
+      toast.error('Error submitting review', {
+        position: "top-right",
+        autoClose: 3000,
+      })
     }
   }
 

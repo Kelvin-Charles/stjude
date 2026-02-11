@@ -526,9 +526,34 @@ def seed_reverse_word(project):
     for prompt, a, b, c, d, correct, pts in questions2:
         db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
 
+def migrate_db():
+    """Migrate database schema - add missing columns"""
+    with app.app_context():
+        try:
+            from sqlalchemy import text, inspect
+            inspector = inspect(db.engine)
+            
+            # Check if project_submissions table exists and has submission_type column
+            if 'project_submissions' in inspector.get_table_names():
+                columns = [col['name'] for col in inspector.get_columns('project_submissions')]
+                if 'submission_type' not in columns:
+                    print("Adding submission_type column to project_submissions table...")
+                    try:
+                        with db.engine.connect() as conn:
+                            conn.execute(text("ALTER TABLE project_submissions ADD COLUMN submission_type VARCHAR(50) DEFAULT 'project'"))
+                            conn.commit()
+                        print("✓ Added submission_type column")
+                    except Exception as e:
+                        print(f"Error adding submission_type column: {e}")
+        except Exception as e:
+            print(f"Migration check error (may be normal on first run): {e}")
+
 def init_db():
     """Initialize database tables and default data"""
     with app.app_context():
+        # Run migrations first
+        migrate_db()
+        # Then create all tables (for new tables)
         db.create_all()
         
         # Create default manager if doesn't exist

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { toast } from 'react-toastify'
 import ReadingResources from './ReadingResources'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
@@ -15,13 +16,22 @@ export default function StudentDashboard() {
   const [myRank, setMyRank] = useState(null)
   const [myPoints, setMyPoints] = useState(0)
   const [activeTab, setActiveTab] = useState('projects') // 'projects' or 'resources'
+  const [reviewedSubmissionsCount, setReviewedSubmissionsCount] = useState(0)
+  const [recentReview, setRecentReview] = useState(null)
+  const [showReviewBanner, setShowReviewBanner] = useState(false)
 
   useEffect(() => {
     fetchProjects()
     fetchLeaderboard()
+    fetchReviewedSubmissions()
     // Refresh leaderboard every 5 seconds for real-time updates
     const interval = setInterval(fetchLeaderboard, 5000)
-    return () => clearInterval(interval)
+    // Check for new reviews every 10 seconds
+    const reviewInterval = setInterval(fetchReviewedSubmissions, 10000)
+    return () => {
+      clearInterval(interval)
+      clearInterval(reviewInterval)
+    }
   }, [])
 
   const fetchProjects = async () => {
@@ -60,6 +70,47 @@ export default function StudentDashboard() {
     }
   }
 
+  const fetchReviewedSubmissions = async () => {
+    try {
+      // Get all submissions
+      const response = await fetch(`${API_URL}/api/submissions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await response.json()
+      if (data.success) {
+        const submissions = data.submissions || []
+        // Count reviewed submissions (status is not 'submitted')
+        const reviewed = submissions.filter(s => 
+          s.status && s.status !== 'submitted' && s.review_notes
+        )
+        setReviewedSubmissionsCount(reviewed.length)
+        
+        // Check for new reviews (recently reviewed)
+        const recentlyReviewed = reviewed
+          .filter(s => s.reviewed_at)
+          .sort((a, b) => new Date(b.reviewed_at) - new Date(a.reviewed_at))[0]
+        
+        if (recentlyReviewed && recentlyReviewed.reviewed_at) {
+          const reviewTime = new Date(recentlyReviewed.reviewed_at)
+          const now = new Date()
+          const minutesAgo = (now - reviewTime) / 60000
+          
+          // Show banner if reviewed in last 5 minutes and not already shown
+          if (minutesAgo < 5 && (!recentReview || recentReview.id !== recentlyReviewed.id)) {
+            setRecentReview(recentlyReviewed)
+            setShowReviewBanner(true)
+            // Auto-hide after 10 seconds
+            setTimeout(() => setShowReviewBanner(false), 10000)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching reviewed submissions:', error)
+    }
+  }
+
   const updateProgress = async (projectId, status, percentage) => {
     try {
       const response = await fetch(`${API_URL}/api/progress`, {
@@ -76,13 +127,17 @@ export default function StudentDashboard() {
       })
       const data = await response.json()
       if (data.success) {
-        // Refresh projects list to show updated progress
+        // Refresh projects list to show updated progress immediately
         await fetchProjects()
         fetchLeaderboard() // Refresh leaderboard after progress update
         // Don't close modal, let student continue
       }
     } catch (error) {
       console.error('Error updating progress:', error)
+      toast.error('Error updating progress', {
+        position: "top-right",
+        autoClose: 3000,
+      })
     }
   }
 
@@ -92,6 +147,33 @@ export default function StudentDashboard() {
 
   return (
     <div className="mt-8 flex gap-6">
+      {/* Notification Banner */}
+      {showReviewBanner && recentReview && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-fade-in">
+          <div className="bg-green-500 text-white p-4 rounded-lg shadow-xl flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <p className="font-bold">Your submission has been reviewed!</p>
+                <p className="text-sm opacity-90">
+                  {recentReview.project_name || 'Final Project'} - {recentReview.status}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowReviewBanner(false)}
+              className="text-white hover:text-gray-200"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1">
         <div className="flex justify-between items-center mb-6">
@@ -117,12 +199,21 @@ export default function StudentDashboard() {
               📚 Reading Resources
             </button>
           </div>
-          <div className="bg-white rounded-lg px-4 py-2 shadow-lg">
-            <div className="text-sm text-gray-600">Your Points</div>
-            <div className="text-2xl font-bold text-indigo-600">{myPoints}</div>
-            {myRank && (
-              <div className="text-xs text-gray-500">Rank: #{myRank}</div>
+          <div className="flex gap-3">
+            {reviewedSubmissionsCount > 0 && (
+              <div className="bg-blue-500 text-white rounded-lg px-4 py-2 shadow-lg cursor-pointer hover:bg-blue-600 transition-colors">
+                <div className="text-sm font-semibold">📝 Reviewed</div>
+                <div className="text-2xl font-bold">{reviewedSubmissionsCount}</div>
+                <div className="text-xs opacity-90">submission{reviewedSubmissionsCount > 1 ? 's' : ''}</div>
+              </div>
             )}
+            <div className="bg-white rounded-lg px-4 py-2 shadow-lg">
+              <div className="text-sm text-gray-600">Your Points</div>
+              <div className="text-2xl font-bold text-indigo-600">{myPoints}</div>
+              {myRank && (
+                <div className="text-xs text-gray-500">Rank: #{myRank}</div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -374,9 +465,13 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
       if (data.success) {
         setProjectProgress(data.progress)
         setStepProgress(data.step_progress || [])
+        // Return the progress data for immediate use
+        return data
       }
+      return null
     } catch (err) {
       console.error('Error fetching project progress:', err)
+      return null
     }
   }
 
@@ -468,11 +563,37 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
         setSubmitResult(data)
 
         // Refresh project progress to get accurate calculation from backend
-        await fetchProjectProgress()
+        const progressData = await fetchProjectProgress()
         
-        // Update overall project progress (backend will calculate accurately)
-        if (projectProgress) {
-          onUpdate(project.id, projectProgress.status, projectProgress.progress_percentage)
+        // Use the freshly fetched progress data
+        if (progressData && progressData.progress) {
+          const updatedProgress = progressData.progress
+          const calculatedPercentage = progressData.overall_percentage || updatedProgress.progress_percentage
+          const status = updatedProgress.status || (calculatedPercentage === 100 ? 'completed' : 'in_progress')
+          
+          // Update the parent component with accurate progress
+          onUpdate(project.id, status, calculatedPercentage)
+          
+          // Show success toast
+          if (data.all_correct) {
+            toast.success(`🎉 Perfect! You earned ${data.total_points} points!`, {
+              position: "top-right",
+              autoClose: 3000,
+            })
+          } else {
+            toast.warning(`You scored ${data.total_points}/${data.max_points} points. Some answers need review.`, {
+              position: "top-right",
+              autoClose: 4000,
+            })
+          }
+          
+          // Show completion message if project is 100% complete
+          if (calculatedPercentage === 100) {
+            toast.success('🎊 Congratulations! You\'ve completed this project!', {
+              position: "top-right",
+              autoClose: 5000,
+            })
+          }
         } else {
           // Fallback calculation
           const totalSteps = steps.length || 1
@@ -488,10 +609,18 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
         }
       } else {
         setSubmitResult({ error: data.error || 'Could not submit answers.' })
+        toast.error(data.error || 'Could not submit answers.', {
+          position: "top-right",
+          autoClose: 3000,
+        })
       }
     } catch (err) {
       console.error('Error submitting step answers', err)
       setSubmitResult({ error: 'Network error while submitting answers.' })
+      toast.error('Network error while submitting answers.', {
+        position: "top-right",
+        autoClose: 3000,
+      })
     } finally {
       setSubmitting(false)
     }
@@ -870,7 +999,12 @@ function SubmissionModal({ project, onClose, token, onSuccess }) {
     const selectedFile = e.target.files[0]
     if (selectedFile) {
       if (selectedFile.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB')
+        const errorMsg = 'File size must be less than 10MB'
+        setError(errorMsg)
+        toast.error(errorMsg, {
+          position: "top-right",
+          autoClose: 3000,
+        })
         return
       }
       setFile(selectedFile)
@@ -881,7 +1015,12 @@ function SubmissionModal({ project, onClose, token, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!file) {
-      setError('Please select a file to upload')
+      const errorMsg = 'Please select a file to upload'
+      setError(errorMsg)
+      toast.warning(errorMsg, {
+        position: "top-right",
+        autoClose: 3000,
+      })
       return
     }
 
@@ -909,13 +1048,27 @@ function SubmissionModal({ project, onClose, token, onSuccess }) {
         setFile(null)
         setNotes('')
         await fetchSubmissions()
+        toast.success('Project submitted successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+        })
         if (onSuccess) onSuccess()
       } else {
-        setError(data.error || 'Failed to submit project')
+        const errorMsg = data.error || 'Failed to submit project'
+        setError(errorMsg)
+        toast.error(errorMsg, {
+          position: "top-right",
+          autoClose: 3000,
+        })
       }
     } catch (err) {
       console.error('Error submitting project:', err)
-      setError('Network error. Please try again.')
+      const errorMsg = 'Network error. Please try again.'
+      setError(errorMsg)
+      toast.error(errorMsg, {
+        position: "top-right",
+        autoClose: 3000,
+      })
     } finally {
       setSubmitting(false)
     }
@@ -1126,7 +1279,12 @@ function FinalProjectSubmissionModal({ onClose, token, onSuccess }) {
     const selectedFile = e.target.files[0]
     if (selectedFile) {
       if (selectedFile.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB')
+        const errorMsg = 'File size must be less than 10MB'
+        setError(errorMsg)
+        toast.error(errorMsg, {
+          position: "top-right",
+          autoClose: 3000,
+        })
         return
       }
       setFile(selectedFile)
@@ -1137,7 +1295,12 @@ function FinalProjectSubmissionModal({ onClose, token, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!file) {
-      setError('Please select a file to upload')
+      const errorMsg = 'Please select a file to upload'
+      setError(errorMsg)
+      toast.warning(errorMsg, {
+        position: "top-right",
+        autoClose: 3000,
+      })
       return
     }
 
@@ -1163,13 +1326,27 @@ function FinalProjectSubmissionModal({ onClose, token, onSuccess }) {
         setFile(null)
         setNotes('')
         await fetchSubmissions()
+        toast.success('Final project submitted successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+        })
         if (onSuccess) onSuccess()
       } else {
-        setError(data.error || 'Failed to submit final project')
+        const errorMsg = data.error || 'Failed to submit final project'
+        setError(errorMsg)
+        toast.error(errorMsg, {
+          position: "top-right",
+          autoClose: 3000,
+        })
       }
     } catch (err) {
       console.error('Error submitting final project:', err)
-      setError('Network error. Please try again.')
+      const errorMsg = 'Network error. Please try again.'
+      setError(errorMsg)
+      toast.error(errorMsg, {
+        position: "top-right",
+        autoClose: 3000,
+      })
     } finally {
       setSubmitting(false)
     }

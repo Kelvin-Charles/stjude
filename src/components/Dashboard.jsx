@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import StudentDashboard from './StudentDashboard'
 import MentorDashboard from './MentorDashboard'
 import ManagerDashboard from './ManagerDashboard'
+import NotificationCenter from './NotificationCenter'
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://stjude.beetletz.online'
 
@@ -38,6 +39,7 @@ export default function Dashboard() {
               <span className="text-gray-700">
                 Welcome, <span className="font-semibold">{user.full_name}</span> ({user.role})
               </span>
+              <NotificationCenter />
               <button
                 onClick={logout}
                 className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors"

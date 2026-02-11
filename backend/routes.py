@@ -10,6 +10,7 @@ from models import (
   StudentStepAnswer,
   Resource,
   ProjectSubmission,
+  Notification,
 )
 from auth import (
   generate_token,
@@ -182,10 +183,52 @@ def list_projects(user):
         prog = ProjectProgress.query.filter_by(
           student_id=user.id, project_id=p.id
         ).first()
-        d["progress"] = prog.to_dict() if prog else None
+        
+        if not prog:
+          prog = ProjectProgress(student_id=user.id, project_id=p.id)
+          db.session.add(prog)
+          db.session.commit()
+        
+        # Recalculate progress based on actual step completions (same logic as get_project_progress)
+        steps = ProjectStep.query.filter_by(
+          project_id=p.id, is_released=True
+        ).order_by(ProjectStep.order_index.asc()).all()
+        
+        completed_steps = 0
+        for step in steps:
+          has_answers = StudentStepAnswer.query.join(
+            ProjectStepQuestion
+          ).filter(
+            StudentStepAnswer.student_id == user.id,
+            ProjectStepQuestion.step_id == step.id
+          ).first() is not None
+          
+          if has_answers:
+            completed_steps += 1
+        
+        total_steps = len(steps)
+        calculated_percentage = int((completed_steps / total_steps) * 100) if total_steps > 0 else 0
+        
+        # Update progress if calculation differs
+        if prog.progress_percentage != calculated_percentage:
+          prog.progress_percentage = calculated_percentage
+          if calculated_percentage == 100:
+            prog.status = "completed"
+            if not prog.completed_at:
+              prog.completed_at = datetime.utcnow()
+          elif calculated_percentage > 0:
+            prog.status = "in_progress"
+            if not prog.started_at:
+              prog.started_at = datetime.utcnow()
+          else:
+            prog.status = "not_started"
+          db.session.commit()
+        
+        d["progress"] = prog.to_dict()
       out.append(d)
     return jsonify({"success": True, "projects": out}), 200
   except Exception as e:
+    db.session.rollback()
     return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -935,6 +978,23 @@ def review_submission(user, submission_id):
     submission.reviewed_by = user.id
     submission.reviewed_at = datetime.utcnow()
     
+    # Create notification for the student
+    project_name = submission.project.name if submission.project else "Final Project"
+    notification_title = f"Your submission has been reviewed"
+    notification_message = f"Your submission for {project_name} has been reviewed by {user.full_name}."
+    if submission.review_notes:
+      notification_message += f" Review: {submission.review_notes[:100]}"
+    
+    notification = Notification(
+      user_id=submission.student_id,
+      title=notification_title,
+      message=notification_message,
+      type="review",
+      related_type="submission",
+      related_id=submission.id
+    )
+    db.session.add(notification)
+    
     db.session.commit()
     
     return jsonify({
@@ -1023,5 +1083,82 @@ def my_final_project_submissions(user):
       "submissions": [s.to_dict() for s in submissions]
     }), 200
   except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+# Notification Endpoints
+@api.route("/notifications", methods=["GET"])
+@require_auth
+def get_notifications(user):
+  """Get user's notifications"""
+  try:
+    limit = request.args.get('limit', type=int, default=50)
+    unread_only = request.args.get('unread_only', type=bool, default=False)
+    
+    query = Notification.query.filter_by(user_id=user.id)
+    if unread_only:
+      query = query.filter_by(is_read=False)
+    
+    notifications = query.order_by(Notification.created_at.desc()).limit(limit).all()
+    
+    return jsonify({
+      "success": True,
+      "notifications": [n.to_dict() for n in notifications]
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/notifications/unread-count", methods=["GET"])
+@require_auth
+def get_unread_count(user):
+  """Get count of unread notifications"""
+  try:
+    count = Notification.query.filter_by(user_id=user.id, is_read=False).count()
+    return jsonify({
+      "success": True,
+      "count": count
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/notifications/<int:notification_id>/read", methods=["POST"])
+@require_auth
+def mark_notification_read(user, notification_id):
+  """Mark a notification as read"""
+  try:
+    notification = Notification.query.get_or_404(notification_id)
+    
+    # Ensure user can only mark their own notifications as read
+    if notification.user_id != user.id:
+      return jsonify({"success": False, "error": "Access denied"}), 403
+    
+    notification.is_read = True
+    db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "message": "Notification marked as read"
+    }), 200
+  except Exception as e:
+    db.session.rollback()
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
+@api.route("/notifications/mark-all-read", methods=["POST"])
+@require_auth
+def mark_all_notifications_read(user):
+  """Mark all user's notifications as read"""
+  try:
+    Notification.query.filter_by(user_id=user.id, is_read=False).update({"is_read": True})
+    db.session.commit()
+    
+    return jsonify({
+      "success": True,
+      "message": "All notifications marked as read"
+    }), 200
+  except Exception as e:
+    db.session.rollback()
     return jsonify({"success": False, "error": str(e)}), 500
 

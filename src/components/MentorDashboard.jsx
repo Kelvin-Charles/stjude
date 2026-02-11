@@ -11,7 +11,7 @@ export default function MentorDashboard() {
   const [loading, setLoading] = useState(true)
   const [leaderboard, setLeaderboard] = useState([])
   const [showLeaderboard, setShowLeaderboard] = useState(true)
-  const [activeTab, setActiveTab] = useState('overview') // 'overview' or 'resources'
+  const [activeTab, setActiveTab] = useState('overview') // 'overview', 'resources', or 'submissions'
   const [resources, setResources] = useState([])
   const [showCreateResource, setShowCreateResource] = useState(false)
   const [newResource, setNewResource] = useState({
@@ -20,6 +20,12 @@ export default function MentorDashboard() {
     description: '',
     category: 'General'
   })
+  const [submissions, setSubmissions] = useState([])
+  const [selectedSubmission, setSelectedSubmission] = useState(null)
+  const [submissionContent, setSubmissionContent] = useState(null)
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false)
+  const [reviewNotes, setReviewNotes] = useState('')
+  const [reviewStatus, setReviewStatus] = useState('submitted')
 
   useEffect(() => {
     fetchStudents()
@@ -30,6 +36,12 @@ export default function MentorDashboard() {
     const interval = setInterval(fetchLeaderboard, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (activeTab === 'submissions') {
+      fetchSubmissions()
+    }
+  }, [activeTab])
 
   const fetchStudents = async () => {
     try {
@@ -119,6 +131,81 @@ export default function MentorDashboard() {
     }
   }
 
+  const fetchSubmissions = async () => {
+    setLoadingSubmissions(true)
+    try {
+      const response = await fetch(`${API_URL}/api/admin/submissions`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await response.json()
+      if (data.success) {
+        setSubmissions(data.submissions || [])
+      }
+    } catch (error) {
+      console.error('Error fetching submissions:', error)
+    } finally {
+      setLoadingSubmissions(false)
+    }
+  }
+
+  const fetchSubmissionContent = async (submissionId) => {
+    try {
+      const response = await fetch(`${API_URL}/api/submissions/${submissionId}/content`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      const data = await response.json()
+      if (data.success) {
+        setSubmissionContent(data)
+      } else {
+        alert('Error loading file: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error fetching submission content:', error)
+      alert('Error loading file content')
+    }
+  }
+
+  const handleViewSubmission = async (submission) => {
+    setSelectedSubmission(submission)
+    setReviewNotes(submission.review_notes || '')
+    setReviewStatus(submission.status || 'submitted')
+    setSubmissionContent(null)
+    await fetchSubmissionContent(submission.id)
+  }
+
+  const handleReviewSubmission = async () => {
+    if (!selectedSubmission) return
+    
+    try {
+      const response = await fetch(`${API_URL}/api/submissions/${selectedSubmission.id}/review`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          review_notes: reviewNotes,
+          status: reviewStatus
+        })
+      })
+      const data = await response.json()
+      if (data.success) {
+        alert('Review submitted successfully!')
+        setSelectedSubmission(null)
+        fetchSubmissions()
+      } else {
+        alert('Error submitting review: ' + data.error)
+      }
+    } catch (error) {
+      console.error('Error reviewing submission:', error)
+      alert('Error submitting review')
+    }
+  }
+
   const fetchStudentProgress = async (studentId) => {
     try {
       const response = await fetch(`${API_URL}/api/students/${studentId}/progress`, {
@@ -163,6 +250,16 @@ export default function MentorDashboard() {
             }`}
           >
             Manage Resources
+          </button>
+          <button
+            onClick={() => setActiveTab('submissions')}
+            className={`px-4 py-2 rounded-lg font-semibold ${
+              activeTab === 'submissions'
+                ? 'bg-white text-indigo-600'
+                : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            📤 Submissions
           </button>
         </div>
         <button
@@ -213,48 +310,52 @@ export default function MentorDashboard() {
         </div>
       )}
 
-      {activeTab === 'overview' && report && (
-        <div className="bg-white rounded-xl p-6 shadow-lg mb-6">
-          <h3 className="text-xl font-bold mb-4">Overview Report</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Total Students</p>
-              <p className="text-2xl font-bold">{report.total_students}</p>
+      {activeTab === 'overview' && (
+        <>
+          {report && (
+            <div className="bg-white rounded-xl p-6 shadow-lg mb-6">
+              <h3 className="text-xl font-bold mb-4">Overview Report</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Total Students</p>
+                  <p className="text-2xl font-bold">{report.total_students}</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Total Projects</p>
+                  <p className="text-2xl font-bold">{report.total_projects}</p>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">In Progress</p>
+                  <p className="text-2xl font-bold">{report.progress_stats.in_progress}</p>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg">
+                  <p className="text-sm text-gray-600">Completed</p>
+                  <p className="text-2xl font-bold">{report.progress_stats.completed}</p>
+                </div>
+              </div>
             </div>
-            <div className="bg-green-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Total Projects</p>
-              <p className="text-2xl font-bold">{report.total_projects}</p>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">In Progress</p>
-              <p className="text-2xl font-bold">{report.progress_stats.in_progress}</p>
-            </div>
-            <div className="bg-purple-50 p-4 rounded-lg">
-              <p className="text-sm text-gray-600">Completed</p>
-              <p className="text-2xl font-bold">{report.progress_stats.completed}</p>
+          )}
+
+          <div className="bg-white rounded-xl p-6 shadow-lg">
+            <h3 className="text-xl font-bold mb-4">Students</h3>
+            <div className="space-y-2">
+              {students.map((student) => (
+                <div
+                  key={student.id}
+                  className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
+                  onClick={() => fetchStudentProgress(student.id)}
+                >
+                  <div>
+                    <p className="font-semibold">{student.full_name}</p>
+                    <p className="text-sm text-gray-600">{student.email}</p>
+                  </div>
+                  <button className="text-indigo-600 hover:underline">View Progress</button>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        </>
       )}
-
-      <div className="bg-white rounded-xl p-6 shadow-lg">
-        <h3 className="text-xl font-bold mb-4">Students</h3>
-        <div className="space-y-2">
-          {students.map((student) => (
-            <div
-              key={student.id}
-              className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-              onClick={() => fetchStudentProgress(student.id)}
-            >
-              <div>
-                <p className="font-semibold">{student.full_name}</p>
-                <p className="text-sm text-gray-600">{student.email}</p>
-              </div>
-              <button className="text-indigo-600 hover:underline">View Progress</button>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {selectedStudent && (
         <StudentProgressModal
@@ -346,6 +447,190 @@ export default function MentorDashboard() {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'submissions' && (
+        <div className="bg-white rounded-xl p-6 shadow-lg">
+          <h3 className="text-2xl font-bold text-gray-800 mb-4">📤 Student Submissions</h3>
+          
+          {loadingSubmissions ? (
+            <div className="text-center py-8">Loading submissions...</div>
+          ) : submissions.length === 0 ? (
+            <div className="text-center py-8 text-gray-600">No submissions yet.</div>
+          ) : (
+            <div className="space-y-4">
+              {submissions.map((submission) => (
+                <div key={submission.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h4 className="font-bold text-lg">{submission.filename}</h4>
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          submission.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          submission.status === 'needs_revision' ? 'bg-red-100 text-red-800' :
+                          submission.status === 'reviewed' ? 'bg-blue-100 text-blue-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {submission.status}
+                        </span>
+                        {submission.submission_type === 'final_project' && (
+                          <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                            Final Project
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        <strong>Student:</strong> {submission.student_name}
+                        {submission.project_name && (
+                          <> • <strong>Project:</strong> {submission.project_name}</>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Submitted: {new Date(submission.submitted_at).toLocaleString()}
+                        {submission.reviewed_at && (
+                          <> • Reviewed: {new Date(submission.reviewed_at).toLocaleString()}</>
+                        )}
+                      </p>
+                      {submission.notes && (
+                        <p className="text-sm text-gray-700 mt-2 italic">Notes: {submission.notes}</p>
+                      )}
+                      {submission.review_notes && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded">
+                          <p className="text-sm font-semibold">Review Notes:</p>
+                          <p className="text-sm text-gray-700">{submission.review_notes}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 ml-4">
+                      <button
+                        onClick={() => handleViewSubmission(submission)}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm"
+                      >
+                        👁️ View Code
+                      </button>
+                      <a
+                        href={`${API_URL}/api/submissions/${submission.id}/download`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // Add auth header via fetch instead
+                          e.preventDefault()
+                          fetch(`${API_URL}/api/submissions/${submission.id}/download`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          }).then(res => res.blob()).then(blob => {
+                            const url = window.URL.createObjectURL(blob)
+                            const a = document.createElement('a')
+                            a.href = url
+                            a.download = submission.filename
+                            a.click()
+                            window.URL.revokeObjectURL(url)
+                          })
+                        }}
+                      >
+                        📥 Download
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Submission View Modal */}
+      {selectedSubmission && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-2xl font-bold mb-2">{selectedSubmission.filename}</h3>
+                <p className="text-gray-600">
+                  Student: <strong>{selectedSubmission.student_name}</strong>
+                  {selectedSubmission.project_name && (
+                    <> • Project: <strong>{selectedSubmission.project_name}</strong></>
+                  )}
+                </p>
+                <p className="text-sm text-gray-500">
+                  Submitted: {new Date(selectedSubmission.submitted_at).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setSelectedSubmission(null)
+                  setSubmissionContent(null)
+                }}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Code Viewer */}
+            {submissionContent && (
+              <div className="mb-4">
+                <h4 className="font-bold mb-2">Source Code:</h4>
+                {submissionContent.is_binary ? (
+                  <div className="bg-gray-100 p-4 rounded">
+                    <p className="text-gray-600">This is a binary file. Please download to view.</p>
+                  </div>
+                ) : (
+                  <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto text-sm">
+                    <code>{submissionContent.content}</code>
+                  </pre>
+                )}
+              </div>
+            )}
+
+            {/* Review Section */}
+            <div className="border-t pt-4">
+              <h4 className="font-bold mb-2">Review Submission</h4>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Status:</label>
+                <select
+                  value={reviewStatus}
+                  onChange={(e) => setReviewStatus(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  <option value="submitted">Submitted</option>
+                  <option value="reviewed">Reviewed</option>
+                  <option value="approved">Approved</option>
+                  <option value="needs_revision">Needs Revision</option>
+                </select>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-1">Review Notes:</label>
+                <textarea
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder="Add your review notes and feedback..."
+                  className="w-full px-3 py-2 border rounded-lg h-32"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleReviewSubmission}
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
+                >
+                  Submit Review
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedSubmission(null)
+                    setSubmissionContent(null)
+                  }}
+                  className="bg-gray-300 text-gray-800 px-6 py-2 rounded-lg hover:bg-gray-400"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

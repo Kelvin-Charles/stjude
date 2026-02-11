@@ -830,6 +830,47 @@ def my_submissions(user):
     return jsonify({"success": False, "error": str(e)}), 500
 
 
+@api.route("/submissions/<int:submission_id>/content", methods=["GET"])
+@require_auth
+def get_submission_content(user, submission_id):
+  """Get submission file content for viewing"""
+  try:
+    submission = ProjectSubmission.query.get_or_404(submission_id)
+    
+    # Students can only view their own, mentors/managers can view any
+    if user.role == UserRole.STUDENT and submission.student_id != user.id:
+      return jsonify({"success": False, "error": "Access denied"}), 403
+    
+    if not os.path.exists(submission.file_path):
+      return jsonify({"success": False, "error": "File not found"}), 404
+    
+    # Read file content
+    try:
+      with open(submission.file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    except UnicodeDecodeError:
+      # If UTF-8 fails, try reading as binary and return base64
+      import base64
+      with open(submission.file_path, 'rb') as f:
+        content = base64.b64encode(f.read()).decode('utf-8')
+        return jsonify({
+          "success": True,
+          "content": content,
+          "is_binary": True,
+          "filename": submission.filename
+        }), 200
+    
+    return jsonify({
+      "success": True,
+      "content": content,
+      "is_binary": False,
+      "filename": submission.filename,
+      "mime_type": submission.mime_type
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
 @api.route("/submissions/<int:submission_id>/download", methods=["GET"])
 @require_auth
 def download_submission(user, submission_id):

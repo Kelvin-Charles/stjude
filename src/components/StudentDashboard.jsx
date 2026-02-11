@@ -144,49 +144,73 @@ export default function StudentDashboard() {
               </div>
             </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {projects.map((project) => (
-          <div key={project.id} className="bg-white rounded-xl p-6 shadow-lg">
-            <h3 className="text-xl font-bold text-gray-800 mb-2">{project.name}</h3>
-            <p className="text-gray-600 mb-4">{project.description}</p>
-            
-            {project.progress && (
-              <div className="mb-4">
-                <div className="flex justify-between text-sm mb-1">
-                  <span>Progress</span>
-                  <span>{project.progress.progress_percentage}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-indigo-600 h-2 rounded-full"
-                    style={{ width: `${project.progress.progress_percentage}%` }}
-                  ></div>
-                </div>
-                <p className="text-sm text-gray-600 mt-2">Status: {project.progress.status}</p>
-                {project.progress.mentor_feedback && (
-                  <div className="mt-2 p-2 bg-blue-50 rounded text-sm">
-                    <strong>Mentor Feedback:</strong> {project.progress.mentor_feedback}
-                  </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+        {projects.map((project) => {
+          const isBasic = project.description?.toLowerCase().includes('challenge');
+          
+          return (
+            <div 
+              key={project.id} 
+              className={`group bg-white rounded-2xl p-6 shadow-md hover:shadow-xl transition-all duration-300 border-t-4 ${
+                isBasic ? 'border-teal-500' : 'border-indigo-600'
+              } flex flex-col h-full`}
+            >
+              <div className="flex justify-between items-start mb-3">
+                <h3 className="text-xl font-bold text-gray-800 leading-tight group-hover:text-indigo-600 transition-colors">
+                  {project.name}
+                </h3>
+                {isBasic && (
+                  <span className="bg-teal-100 text-teal-700 text-[10px] uppercase font-black px-2 py-1 rounded-md tracking-wider">
+                    Basic
+                  </span>
                 )}
               </div>
-            )}
+              
+              <p className="text-gray-500 text-sm mb-6 flex-grow leading-relaxed">
+                {project.description}
+              </p>
+            
+              <div className="mb-6 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                <div className="flex justify-between text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">
+                  <span>Progress</span>
+                  <span className="text-indigo-600">
+                    {project.progress ? project.progress.progress_percentage : 0}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${project.progress ? project.progress.progress_percentage : 0}%` }}
+                  ></div>
+                </div>
+                <div className="mt-2 flex items-center">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    project.progress?.status === 'completed' ? 'bg-green-500' : 
+                    project.progress?.status === 'in_progress' ? 'bg-amber-500' : 'bg-gray-300'
+                  }`}></div>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">
+                    {project.progress ? project.progress.status.replace('_', ' ') : 'not started'}
+                  </p>
+                  </div>
+              </div>
 
-            <div className="flex space-x-2">
+              <div className="flex gap-3 mt-auto">
               <button
                 onClick={() => setSelectedProject(project)}
-                className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
+                  className="flex-1 bg-gray-100 text-gray-700 px-4 py-2.5 rounded-xl hover:bg-indigo-600 hover:text-white transition-all duration-200 font-bold text-sm whitespace-nowrap"
               >
                 View Details
               </button>
-              <button
-                onClick={() => setSelectedProjectForSubmission({...project, submissionType: 'project'})}
-                className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
-              >
-                📤 Submit Project
-              </button>
+                <button
+                  onClick={() => setSelectedProjectForSubmission({...project, submissionType: 'project'})}
+                  className="flex-1 bg-green-600 text-white px-4 py-2.5 rounded-xl hover:bg-green-700 hover:scale-[1.02] active:scale-95 transition-all duration-200 font-bold text-sm whitespace-nowrap flex items-center justify-center gap-2 shadow-sm shadow-green-200"
+                >
+                  <span>📤</span> Submit
+                </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {selectedProject && (
@@ -301,7 +325,6 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
         const data = await res.json()
         if (data.success) {
           setSteps(data.steps || [])
-          setCurrentStepIndex(0)
         } else {
           setStepsError(data.error || 'Could not load steps for this project.')
         }
@@ -316,6 +339,29 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
     fetchSteps()
     fetchProjectProgress()
   }, [project.id, token])
+
+  // Set current step to first incomplete step when steps and progress are loaded
+  useEffect(() => {
+    if (steps.length > 0 && stepProgress.length > 0) {
+      // Find the first incomplete step
+      let firstIncompleteIndex = -1
+      for (let i = 0; i < steps.length; i++) {
+        const stepProg = stepProgress.find(sp => sp.step_id === steps[i].id)
+        if (!stepProg || !stepProg.is_completed) {
+          firstIncompleteIndex = i
+          break
+        }
+      }
+      
+      // If all steps are completed, show the last step
+      // Otherwise, show the first incomplete step
+      if (firstIncompleteIndex === -1) {
+        setCurrentStepIndex(steps.length - 1)
+      } else {
+        setCurrentStepIndex(firstIncompleteIndex)
+      }
+    }
+  }, [steps, stepProgress])
 
   const fetchProjectProgress = async () => {
     try {
@@ -335,12 +381,71 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
   }
 
   const currentStep = steps[currentStepIndex] || null
+  const currentStepProgress = currentStep ? stepProgress.find(sp => sp.step_id === currentStep.id) : null
+  const isCurrentStepCompleted = currentStepProgress?.is_completed || false
+
+  // Load previous answers when viewing a completed step
+  useEffect(() => {
+    if (currentStep && currentStep.questions && isCurrentStepCompleted) {
+      // Fetch previous answers for this step
+      const loadPreviousAnswers = async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/steps/${currentStep.id}/answers`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          })
+          const data = await res.json()
+          if (data.success && data.has_answers) {
+            // Set previous answers
+            setAnswers(data.answers)
+            // Set submit result to show previous submission
+            setSubmitResult({
+              results: data.results,
+              total_points: data.total_points,
+              max_points: data.max_points,
+              all_correct: data.all_correct,
+            })
+          }
+        } catch (err) {
+          console.error('Error loading previous answers:', err)
+        }
+      }
+      loadPreviousAnswers()
+    } else {
+      // Clear answers when viewing a new incomplete step
+      setAnswers({})
+      setSubmitResult(null)
+    }
+  }, [currentStep?.id, isCurrentStepCompleted, project.id, token])
 
   const handleOptionChange = (questionId, opt) => {
     setAnswers((prev) => ({
       ...prev,
       [questionId]: opt,
     }))
+  }
+
+  const handlePreviousStep = () => {
+    if (currentStepIndex > 0) {
+      setCurrentStepIndex(currentStepIndex - 1)
+      setSubmitResult(null)
+      setAnswers({})
+      setShowQuiz(false)
+      setShowFullCode(false)
+    }
+  }
+
+  const handleNextStep = async () => {
+    setSubmitResult(null)
+    setAnswers({})
+    setShowQuiz(false)
+    setShowFullCode(false)
+    if (currentStepIndex < steps.length - 1) {
+      setCurrentStepIndex(currentStepIndex + 1)
+      // Refresh progress after moving to next step
+      await fetchProjectProgress()
+    }
   }
 
   const handleSubmitStep = async () => {
@@ -389,18 +494,6 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
       setSubmitResult({ error: 'Network error while submitting answers.' })
     } finally {
       setSubmitting(false)
-    }
-  }
-
-  const handleNextStep = async () => {
-    setSubmitResult(null)
-    setAnswers({})
-    setShowQuiz(false)
-    setShowFullCode(false)
-    if (currentStepIndex < steps.length - 1) {
-      setCurrentStepIndex(currentStepIndex + 1)
-      // Refresh progress after moving to next step
-      await fetchProjectProgress()
     }
   }
 
@@ -498,16 +591,23 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
                     const isCompleted = stepProg?.is_completed || false
                     const isCurrent = idx === currentStepIndex
                     return (
-                      <div
+                      <button
                         key={step.id}
-                        className={`flex-1 h-2 rounded ${
+                        onClick={() => {
+                          setCurrentStepIndex(idx)
+                          setSubmitResult(null)
+                          setAnswers({})
+                          setShowQuiz(false)
+                          setShowFullCode(false)
+                        }}
+                        className={`flex-1 h-2 rounded transition-all hover:scale-105 ${
                           isCompleted
-                            ? 'bg-green-500'
+                            ? 'bg-green-500 hover:bg-green-600'
                             : isCurrent
-                            ? 'bg-indigo-500'
-                            : 'bg-gray-300'
+                            ? 'bg-indigo-500 hover:bg-indigo-600'
+                            : 'bg-gray-300 hover:bg-gray-400'
                         }`}
-                        title={`Step ${step.order_index}: ${isCompleted ? 'Completed' : 'Not started'}`}
+                        title={`Step ${step.order_index}: ${isCompleted ? 'Completed' : isCurrent ? 'Current' : 'Not started'} - Click to view`}
                       />
                     )
                   })}
@@ -667,13 +767,23 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
               </div>
             )}
 
+            {/* Show completion message if step is already completed */}
+            {isCurrentStepCompleted && !submitResult && (
+              <div className="mt-4 p-4 bg-green-50 border-2 border-green-500 rounded-lg">
+                <p className="font-bold text-lg text-green-800 mb-2">✓ Step Completed</p>
+                <p className="text-green-700">
+                  You've already completed this step. You earned {currentStepProgress?.points_earned || 0} / {currentStepProgress?.points_possible || 0} points.
+                </p>
+              </div>
+            )}
+
             <div className="flex space-x-2 mt-6">
               <button
                 onClick={handleSubmitStep}
-                disabled={submitting || !currentStep.questions?.length}
+                disabled={submitting || !currentStep.questions?.length || isCurrentStepCompleted}
                 className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
               >
-                {submitting ? 'Submitting...' : 'Submit answers for this step'}
+                {submitting ? 'Submitting...' : isCurrentStepCompleted ? 'Already Completed' : 'Submit answers for this step'}
               </button>
 
               <button
@@ -684,8 +794,26 @@ function ProjectModal({ project, onClose, onUpdate, token, onLeaderboardUpdate }
               </button>
             </div>
 
-            {/* Allow moving to next step after at least one submission on this step */}
-            {submitResult && submitResult.results?.length > 0 && currentStepIndex < steps.length - 1 && (
+            {/* Navigation buttons */}
+            <div className="flex space-x-2 mt-3">
+              <button
+                onClick={handlePreviousStep}
+                disabled={currentStepIndex === 0}
+                className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ⬅️ Previous Step
+              </button>
+              <button
+                onClick={handleNextStep}
+                disabled={currentStepIndex >= steps.length - 1}
+                className="flex-1 bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next Step ➡️
+              </button>
+            </div>
+
+            {/* Allow moving to next step after at least one submission on this step OR if step is completed */}
+            {((submitResult && submitResult.results?.length > 0) || isCurrentStepCompleted) && currentStepIndex < steps.length - 1 && (
               <button
                 onClick={handleNextStep}
                 className="mt-3 w-full bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-bold text-lg shadow-lg"

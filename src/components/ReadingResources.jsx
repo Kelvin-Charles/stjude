@@ -142,9 +142,26 @@ export default function ReadingResources() {
             )}
 
             <div className="prose max-w-none">
-              <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
+              {selectedResource.content.toLowerCase().endsWith('.pdf') ? (
+                <div className="flex flex-col items-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                  <span className="text-5xl mb-4">📄</span>
+                  <p className="text-gray-600 mb-6 font-medium text-center">
+                    This resource is a PDF document.
+                  </p>
+                  <a
+                    href={selectedResource.content.startsWith('http') ? selectedResource.content : `${API_URL}${selectedResource.content}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 flex items-center gap-2"
+                  >
+                    <span>📖</span> Open PDF Document
+                  </a>
+                </div>
+              ) : (
+                <div className="whitespace-pre-wrap text-gray-800 leading-relaxed bg-gray-50 p-6 rounded-xl">
                 {selectedResource.content}
               </div>
+              )}
             </div>
 
             <button

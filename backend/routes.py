@@ -414,6 +414,48 @@ def get_project_progress(user, project_id):
     return jsonify({"success": False, "error": str(e)}), 500
 
 
+@api.route("/steps/<int:step_id>/answers", methods=["GET"])
+@require_student
+def get_step_answers(user, step_id):
+  """Get student's previous answers for a step"""
+  try:
+    step = ProjectStep.query.get_or_404(step_id)
+    answers = {}
+    results = []
+    total_points = 0
+    max_points = 0
+    
+    for q in step.questions:
+      max_points += q.points
+      answer = StudentStepAnswer.query.filter_by(
+        student_id=user.id, question_id=q.id
+      ).first()
+      if answer:
+        answers[q.id] = answer.selected_option
+        total_points += answer.points_awarded
+        results.append({
+          "question_id": q.id,
+          "selected_option": answer.selected_option,
+          "is_correct": answer.is_correct,
+          "points_awarded": answer.points_awarded,
+          "max_points": q.points,
+        })
+    
+    all_correct = all(r["is_correct"] for r in results) if results else False
+    
+    return jsonify({
+      "success": True,
+      "answers": answers,
+      "results": results,
+      "total_points": total_points,
+      "max_points": max_points,
+      "all_correct": all_correct,
+      "has_answers": len(answers) > 0,
+    }), 200
+  except Exception as e:
+    return jsonify({"success": False, "error": str(e)}), 500
+
+
 @api.route("/steps/<int:step_id>/answer", methods=["POST"])
 @require_student
 def answer_step(user, step_id):
@@ -581,6 +623,49 @@ def run_project(user, project_id):
 @require_auth
 def list_resources(user):
   try:
+    # Scan uploads/books directory for PDF files and auto-create resources
+    books_dir = os.path.join(os.path.dirname(__file__), "uploads", "books")
+    if os.path.exists(books_dir):
+      # Get a default creator (first mentor/manager, or current user)
+      default_creator = (
+        User.query.filter(User.role.in_([UserRole.MENTOR, UserRole.MANAGER]))
+        .first()
+      ) or user
+      
+      # Get all existing resource file paths
+      existing_paths = {
+        r.content for r in Resource.query.all() 
+        if r.content and r.content.startswith("/uploads/books/")
+      }
+      
+      # Scan for PDF files
+      for filename in os.listdir(books_dir):
+        if filename.lower().endswith('.pdf'):
+          file_path = os.path.join(books_dir, filename)
+          if os.path.isfile(file_path):
+            # Check if resource already exists for this file
+            resource_path = f"/uploads/books/{filename}"
+            if resource_path not in existing_paths:
+              # Extract title from filename (remove extension and clean up)
+              title = filename.rsplit('.', 1)[0]  # Remove .pdf extension
+              # Clean up common filename patterns
+              title = title.replace(' - libgen.li', '').replace('_', ' ').strip()
+              
+              # Create new resource entry
+              new_resource = Resource(
+                title=title,
+                content=resource_path,
+                description=f"PDF book: {title}",
+                category="Books",
+                created_by=default_creator.id,
+                is_active=True
+              )
+              db.session.add(new_resource)
+      
+      # Commit any new resources
+      db.session.commit()
+    
+    # Return all active resources
     resources = (
       Resource.query.filter_by(is_active=True)
       .order_by(Resource.created_at.desc())
@@ -590,6 +675,7 @@ def list_resources(user):
       {"success": True, "resources": [r.to_dict() for r in resources]}
     ), 200
   except Exception as e:
+    db.session.rollback()
     return jsonify({"success": False, "error": str(e)}), 500
 
 

@@ -5,8 +5,14 @@ from routes import api
 import os
 import json
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"], "allow_headers": ["Content-Type", "Authorization"]}})  # Enable CORS for React frontend
+
+# Serve static files from the uploads directory
+from flask import send_from_directory
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    return send_from_directory(os.path.join(basedir, 'uploads'), filename)
 
 # Configuration
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -42,6 +48,483 @@ def debug_projects():
             'steps_count': len(p.steps)
         } for p in projects]
     }), 200
+
+
+def seed_positive_negative_zero(project):
+    """Seed steps and questions for Positive, Negative, or Zero challenge"""
+    full_code = (
+        "# Positive, Negative, or Zero\n"
+        "number = int(input(\"Enter a number: \"))\n\n"
+        "if number > 0:\n"
+        "    print(\"Positive\")\n"
+        "elif number < 0:\n"
+        "    print(\"Negative\")\n"
+        "else:\n"
+        "    print(\"Zero\")"
+    )
+    
+    step1_code = json.dumps([{
+        "title": "Input and Condition Check",
+        "code": "number = int(input(\"Enter a number: \"))\n\nif number > 0:\n    print(\"Positive\")",
+        "explanation": "Get user input and check if the number is greater than 0 (positive)."
+    }])
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Getting Input and Checking for Positive",
+        content=(
+            "First, we need to get a number from the user using input(). We convert it to an integer "
+            "using int(). Then we check if the number is greater than 0 using the > operator. "
+            "If it is, we print 'Positive'."
+        ),
+        code_snippet=step1_code,
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does int(input()) do?", "Gets text from user", "Gets a number from user and converts it to integer", "Prints a number", "Nothing", "B", 5),
+        ("What operator checks if a number is greater than 0?", "==", ">", "<", ">=", "B", 5),
+        ("What will be printed if the user enters 5?", "Negative", "Zero", "Positive", "Nothing", "C", 5),
+        ("Why do we use int() with input()?", "To print the number", "To convert string input to integer", "To check if it's positive", "To store it", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2_code = json.dumps([{
+        "title": "Complete if-elif-else Structure",
+        "code": full_code,
+        "explanation": "The complete program uses if, elif, and else to handle all three cases: positive, negative, and zero."
+    }])
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Handling All Cases with if-elif-else",
+        content=(
+            "We use elif (else if) to check if the number is less than 0 (negative). "
+            "The else clause handles the case when the number is exactly 0. "
+            "This ensures we cover all possible cases: positive, negative, or zero."
+        ),
+        code_snippet=step2_code,
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("What does elif mean?", "Else if - another condition to check", "End if", "Error if", "Nothing", "A", 5),
+        ("What happens if number is 0?", "Prints 'Positive'", "Prints 'Negative'", "Prints 'Zero'", "Nothing", "C", 5),
+        ("What happens if number is -5?", "Prints 'Positive'", "Prints 'Negative'", "Prints 'Zero'", "Error", "B", 5),
+        ("Why do we need else in this program?", "It's optional", "To handle the zero case", "To print an error", "To stop the program", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_even_or_odd(project):
+    """Seed steps and questions for Even or Odd challenge"""
+    full_code = (
+        "# Even or Odd\n"
+        "number = int(input(\"Enter an integer: \"))\n\n"
+        "if number % 2 == 0:\n"
+        "    print(\"Even\")\n"
+        "else:\n"
+        "    print(\"Odd\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Understanding the Modulo Operator",
+        content=(
+            "The modulo operator (%) gives us the remainder when dividing one number by another. "
+            "For example, 5 % 2 = 1 (5 divided by 2 leaves remainder 1), and 4 % 2 = 0 (4 divided by 2 leaves no remainder). "
+            "If a number % 2 equals 0, the number is even. Otherwise, it's odd."
+        ),
+        code_snippet=json.dumps([{"title": "Modulo Operator", "code": "number % 2 == 0", "explanation": "Checks if number divided by 2 has no remainder (even number)"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does the % operator do?", "Divides numbers", "Gives the remainder after division", "Multiplies numbers", "Adds numbers", "B", 10),
+        ("What is 8 % 2?", "4", "0", "2", "1", "B", 5),
+        ("What is 7 % 2?", "3", "0", "2", "1", "D", 5),
+        ("If number % 2 == 0, the number is:", "Odd", "Even", "Zero", "Negative", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Complete Program",
+        content=(
+            "The complete program gets a number from the user, checks if it's divisible by 2 using the modulo operator, "
+            "and prints 'Even' or 'Odd' accordingly."
+        ),
+        code_snippet=json.dumps([{"title": "Complete Program", "code": full_code, "explanation": "Full program to check if a number is even or odd"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("What will be printed if user enters 10?", "Odd", "Even", "Zero", "Error", "B", 5),
+        ("What will be printed if user enters 15?", "Odd", "Even", "Zero", "Error", "A", 5),
+        ("Why do we use == instead of =?", "== compares values, = assigns values", "They're the same", "== is faster", "== is shorter", "A", 10),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_voting_eligibility(project):
+    """Seed steps and questions for Voting Eligibility challenge"""
+    full_code = (
+        "# Voting Eligibility\n"
+        "age = int(input(\"Enter your age: \"))\n\n"
+        "if age >= 18:\n"
+        "    print(\"You are old enough to vote!\")\n"
+        "else:\n"
+        "    print(\"You are not old enough to vote.\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Getting Age and Using Comparison",
+        content=(
+            "We get the user's age as input and convert it to an integer. "
+            "Then we use the >= operator to check if the age is greater than or equal to 18. "
+            "The >= operator checks if the left value is greater than or equal to the right value."
+        ),
+        code_snippet=json.dumps([{"title": "Age Check", "code": "age = int(input(\"Enter your age: \"))\n\nif age >= 18:", "explanation": "Get age and check if it's 18 or older"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does >= mean?", "Greater than", "Less than", "Greater than or equal to", "Equal to", "C", 5),
+        ("What is the minimum voting age in this program?", "16", "17", "18", "19", "C", 5),
+        ("If age is 18, what happens?", "Prints 'not old enough'", "Prints 'old enough to vote!'", "Error", "Nothing", "B", 5),
+        ("If age is 17, what happens?", "Prints 'old enough to vote!'", "Prints 'not old enough to vote.'", "Error", "Nothing", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_password_validator(project):
+    """Seed steps and questions for Password Validator challenge"""
+    full_code = (
+        "# Password Validator\n"
+        "predefined_password = \"secure123\"\n"
+        "user_password = input(\"Enter your password: \")\n\n"
+        "if user_password == predefined_password:\n"
+        "    print(\"Access granted\")\n"
+        "else:\n"
+        "    print(\"Access denied\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Storing and Getting Passwords",
+        content=(
+            "We define a variable 'predefined_password' with the correct password. "
+            "Then we ask the user to enter their password using input(). "
+            "We'll compare these two values to see if they match."
+        ),
+        code_snippet=json.dumps([{"title": "Password Variables", "code": "predefined_password = \"secure123\"\nuser_password = input(\"Enter your password: \")", "explanation": "Store the correct password and get user's input"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What is stored in predefined_password?", "User's input", "The correct password 'secure123'", "A random password", "Nothing", "B", 5),
+        ("What does input() do?", "Prints text", "Gets text from the user", "Checks password", "Nothing", "B", 5),
+        ("Why do we store the password in a variable?", "To compare it later", "To print it", "To hide it", "It's not necessary", "A", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Comparing Passwords",
+        content=(
+            "We use == to compare the user's password with the predefined password. "
+            "If they match exactly, we print 'Access granted'. Otherwise, we print 'Access denied'. "
+            "String comparison in Python is case-sensitive, so 'Secure123' would not match 'secure123'."
+        ),
+        code_snippet=json.dumps([{"title": "Password Comparison", "code": "if user_password == predefined_password:\n    print(\"Access granted\")\nelse:\n    print(\"Access denied\")", "explanation": "Compare passwords and grant or deny access"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("What operator compares two values for equality?", "=", "==", "!=", ">", "B", 5),
+        ("If user enters 'secure123', what is printed?", "Access granted", "Access denied", "Error", "Nothing", "A", 5),
+        ("If user enters 'Secure123', what is printed?", "Access granted", "Access denied", "Error", "Nothing", "B", 10),
+        ("Why is 'Secure123' different from 'secure123'?", "They're the same", "Python string comparison is case-sensitive", "One has numbers", "They're different lengths", "B", 10),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_print_sequence(project):
+    """Seed steps and questions for Print Sequence 1 to 10 challenge"""
+    full_code = (
+        "# Print a sequence of numbers\n"
+        "for number in range(1, 11):\n"
+        "    print(number)"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Understanding range() Function",
+        content=(
+            "The range() function generates a sequence of numbers. range(1, 11) creates numbers from 1 to 10. "
+            "Note that range(1, 11) includes 1 but excludes 11 (it goes up to but doesn't include the end number). "
+            "This is why we use 11 to get numbers 1 through 10."
+        ),
+        code_snippet=json.dumps([{"title": "Range Function", "code": "range(1, 11)", "explanation": "Creates numbers from 1 to 10 (1 inclusive, 11 exclusive)"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does range(1, 11) create?", "Numbers 1 to 11", "Numbers 1 to 10", "Numbers 0 to 10", "Numbers 0 to 11", "B", 10),
+        ("Why do we use 11 instead of 10?", "Because range excludes the end number", "It's a mistake", "To include 11", "To start from 0", "A", 10),
+        ("What is the first number in range(1, 11)?", "0", "1", "10", "11", "B", 5),
+        ("What is the last number in range(1, 11)?", "9", "10", "11", "12", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Using for Loop with range()",
+        content=(
+            "The for loop iterates through each number in the range. For each iteration, "
+            "the variable 'number' takes the next value from the range, and we print it. "
+            "This continues until all numbers in the range have been processed."
+        ),
+        code_snippet=json.dumps([{"title": "For Loop", "code": full_code, "explanation": "Loop through range and print each number"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("How many times does the loop execute?", "9 times", "10 times", "11 times", "12 times", "B", 5),
+        ("What does 'for number in range(1, 11)' do?", "Prints once", "Loops 10 times, printing each number", "Prints all at once", "Nothing", "B", 10),
+        ("What will be printed first?", "0", "1", "10", "11", "B", 5),
+        ("What will be printed last?", "9", "10", "11", "12", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_count_even_odd(project):
+    """Seed steps and questions for Count Even and Odd challenge"""
+    full_code = (
+        "# Count even and odd numbers\n"
+        "numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n"
+        "even_count = 0\n"
+        "odd_count = 0\n\n"
+        "for number in numbers:\n"
+        "    if number % 2 == 0:\n"
+        "        even_count += 1\n"
+        "    else:\n"
+        "        odd_count += 1\n\n"
+        "print(f\"Even numbers: {even_count}\")\n"
+        "print(f\"Odd numbers: {odd_count}\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Setting Up Counters and List",
+        content=(
+            "We create a list of numbers and initialize two counters: even_count and odd_count, both starting at 0. "
+            "These counters will keep track of how many even and odd numbers we find as we loop through the list."
+        ),
+        code_snippet=json.dumps([{"title": "Initialization", "code": "numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\neven_count = 0\nodd_count = 0", "explanation": "Create a list of numbers and initialize counters"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What is a list in Python?", "A single number", "A collection of items in square brackets", "A string", "A function", "B", 5),
+        ("Why do we start even_count and odd_count at 0?", "To count from zero", "To initialize them before counting", "It's required", "No reason", "B", 5),
+        ("How many numbers are in the list?", "8", "9", "10", "11", "C", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Looping and Counting",
+        content=(
+            "We loop through each number in the list. For each number, we check if it's even using number % 2 == 0. "
+            "If it is even, we increment even_count by 1 using even_count += 1. "
+            "Otherwise, we increment odd_count. After checking all numbers, we print the results."
+        ),
+        code_snippet=json.dumps([{"title": "Loop and Count", "code": "for number in numbers:\n    if number % 2 == 0:\n        even_count += 1\n    else:\n        odd_count += 1", "explanation": "Loop through numbers and count even/odd"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("What does += 1 do?", "Adds 1 to the variable", "Subtracts 1", "Multiplies by 1", "Divides by 1", "A", 5),
+        ("How many even numbers are in [1,2,3,4,5,6,7,8,9,10]?", "4", "5", "6", "7", "B", 5),
+        ("How many odd numbers are in [1,2,3,4,5,6,7,8,9,10]?", "4", "5", "6", "7", "B", 5),
+        ("What does number % 2 == 0 check?", "If number is odd", "If number is even", "If number is zero", "If number is positive", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_sum_of_range(project):
+    """Seed steps and questions for Sum of a Range challenge"""
+    full_code = (
+        "# Sum of a range\n"
+        "n = int(input(\"Enter a number: \"))\n"
+        "sum = 0\n"
+        "counter = 1\n\n"
+        "while counter <= n:\n"
+        "    sum += counter\n"
+        "    counter += 1\n\n"
+        "print(f\"Sum of numbers from 1 to {n} is: {sum}\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Understanding While Loops",
+        content=(
+            "A while loop continues executing as long as a condition is true. "
+            "In this program, we use 'while counter <= n' which means the loop will continue "
+            "as long as counter is less than or equal to n. We start with counter = 1 and sum = 0."
+        ),
+        code_snippet=json.dumps([{"title": "While Loop Setup", "code": "sum = 0\ncounter = 1\n\nwhile counter <= n:", "explanation": "Initialize sum and counter, then start the while loop"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does a while loop do?", "Runs once", "Runs as long as condition is true", "Runs forever", "Nothing", "B", 10),
+        ("What is the initial value of sum?", "1", "0", "n", "counter", "B", 5),
+        ("What is the initial value of counter?", "0", "1", "n", "sum", "B", 5),
+        ("When does 'while counter <= n' stop?", "When counter > n", "When counter == n", "When counter < n", "Never", "A", 10),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Accumulating the Sum",
+        content=(
+            "Inside the loop, we add the current counter value to sum using sum += counter. "
+            "Then we increment counter by 1. This continues until counter exceeds n. "
+            "For example, if n=5, we add 1+2+3+4+5 = 15."
+        ),
+        code_snippet=json.dumps([{"title": "Accumulating Sum", "code": "while counter <= n:\n    sum += counter\n    counter += 1", "explanation": "Add counter to sum, then increment counter"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("What does sum += counter do?", "Adds counter to sum", "Subtracts counter from sum", "Multiplies sum by counter", "Divides sum by counter", "A", 5),
+        ("What does counter += 1 do?", "Adds 1 to counter", "Subtracts 1 from counter", "Multiplies counter by 1", "Nothing", "A", 5),
+        ("If n=3, what is the final sum?", "3", "6", "9", "12", "B", 10),
+        ("Why do we increment counter?", "To stop the loop eventually", "To add to sum", "Both A and B", "No reason", "C", 10),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+
+def seed_reverse_word(project):
+    """Seed steps and questions for Reverse a Word challenge"""
+    full_code = (
+        "# Reverse a word\n"
+        "word = input(\"Enter a word: \")\n"
+        "reversed_word = \"\"\n\n"
+        "for char in word:\n"
+        "    reversed_word = char + reversed_word\n\n"
+        "print(f\"Reversed word: {reversed_word}\")"
+    )
+    
+    step1 = ProjectStep(
+        project_id=project.id,
+        order_index=1,
+        title="Step 1: Understanding String Iteration",
+        content=(
+            "We get a word from the user and create an empty string called reversed_word. "
+            "Then we use a for loop to iterate through each character in the word. "
+            "In Python, you can loop through a string character by character."
+        ),
+        code_snippet=json.dumps([{"title": "String Iteration", "code": "word = input(\"Enter a word: \")\nreversed_word = \"\"\n\nfor char in word:", "explanation": "Get word, create empty string, and loop through each character"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step1)
+    db.session.flush()
+    
+    questions = [
+        ("What does 'for char in word' do?", "Loops through each character in the word", "Prints the word", "Reverses the word", "Nothing", "A", 10),
+        ("What is the initial value of reversed_word?", "The original word", "An empty string", "The first character", "Nothing", "B", 5),
+        ("If word is 'hello', how many times does the loop run?", "4", "5", "6", "1", "B", 5),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions:
+        db.session.add(ProjectStepQuestion(step_id=step1.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
+    
+    step2 = ProjectStep(
+        project_id=project.id,
+        order_index=2,
+        title="Step 2: Building the Reversed Word",
+        content=(
+            "The key is 'reversed_word = char + reversed_word'. We add each character to the FRONT of reversed_word, "
+            "not the back. So if word is 'hello', we process: h, then eh, then leh, then oleh, then olleh. "
+            "This builds the word in reverse order."
+        ),
+        code_snippet=json.dumps([{"title": "Reversing Logic", "code": "for char in word:\n    reversed_word = char + reversed_word", "explanation": "Add each character to the front of reversed_word"}]),
+        full_code=full_code,
+        is_released=True
+    )
+    db.session.add(step2)
+    db.session.flush()
+    
+    questions2 = [
+        ("Why do we use 'char + reversed_word' instead of 'reversed_word + char'?", "To build the word in reverse order", "It's shorter", "It's faster", "No reason", "A", 10),
+        ("If word is 'cat', what is reversed_word after the first iteration?", "'c'", "'tac'", "'cat'", "'a'", "A", 10),
+        ("If word is 'cat', what is the final reversed_word?", "'cat'", "'tac'", "'c'", "'t'", "B", 10),
+        ("What happens if we use 'reversed_word + char' instead?", "Word stays the same", "Word is reversed", "Error occurs", "Nothing prints", "A", 10),
+    ]
+    for prompt, a, b, c, d, correct, pts in questions2:
+        db.session.add(ProjectStepQuestion(step_id=step2.id, prompt=prompt, option_a=a, option_b=b, option_c=c, option_d=d, correct_option=correct, points=pts))
 
 def init_db():
     """Initialize database tables and default data"""
@@ -1599,6 +2082,71 @@ def init_db():
             # Ensure all steps are released
             updated = False
             for step in ProjectStep.query.filter_by(project_id=wg_project.id).all():
+                if not step.is_released:
+                    step.is_released = True
+                    updated = True
+            if updated:
+                db.session.commit()
+
+        # Seed Very Basic Challenges and Basic Problems
+        challenge_projects = [
+            ("POSITIVE-NEGATIVE-OR-ZERO", "Positive, Negative, or Zero", "very_basic"),
+            ("EVEN-OR-ODD", "Even or Odd", "very_basic"),
+            ("VOTING-ELIGIBILITY", "Voting Eligibility", "very_basic"),
+            ("PASSWORD-VALIDATOR", "Password Validator", "very_basic"),
+            ("PRINT-SEQUENCE-1-TO-10", "Print Sequence 1 to 10", "basic"),
+            ("COUNT-EVEN-AND-ODD", "Count Even and Odd Numbers", "basic"),
+            ("SUM-OF-RANGE", "Sum of a Range", "basic"),
+            ("REVERSE-A-WORD", "Reverse a Word", "basic"),
+        ]
+        
+        for project_path, project_name, category in challenge_projects:
+            challenge_project = Project.query.filter(
+                Project.name.ilike(project_path.lower().replace("-", " "))
+            ).first() or Project.query.filter_by(name=project_path).first()
+            
+            if not challenge_project:
+                challenge_project = Project(
+                    name=project_path,
+                    project_path=project_path,
+                    description=f"{project_name} - {category.title()} Challenge",
+                    difficulty_level="beginner",
+                    is_active=True
+                )
+                db.session.add(challenge_project)
+                db.session.flush()
+            else:
+                # Ensure existing challenge projects are active
+                if not challenge_project.is_active:
+                    challenge_project.is_active = True
+                    db.session.flush()
+            
+            # Check if steps already exist
+            existing_steps = ProjectStep.query.filter_by(project_id=challenge_project.id).count()
+            if existing_steps == 0:
+                # Seed steps and questions based on challenge type
+                if project_path == "POSITIVE-NEGATIVE-OR-ZERO":
+                    seed_positive_negative_zero(challenge_project)
+                elif project_path == "EVEN-OR-ODD":
+                    seed_even_or_odd(challenge_project)
+                elif project_path == "VOTING-ELIGIBILITY":
+                    seed_voting_eligibility(challenge_project)
+                elif project_path == "PASSWORD-VALIDATOR":
+                    seed_password_validator(challenge_project)
+                elif project_path == "PRINT-SEQUENCE-1-TO-10":
+                    seed_print_sequence(challenge_project)
+                elif project_path == "COUNT-EVEN-AND-ODD":
+                    seed_count_even_odd(challenge_project)
+                elif project_path == "SUM-OF-RANGE":
+                    seed_sum_of_range(challenge_project)
+                elif project_path == "REVERSE-A-WORD":
+                    seed_reverse_word(challenge_project)
+                
+                db.session.commit()
+            
+            # Ensure all steps are released
+            updated = False
+            for step in ProjectStep.query.filter_by(project_id=challenge_project.id).all():
                 if not step.is_released:
                     step.is_released = True
                     updated = True
